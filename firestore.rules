@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    match /users/{userId} {
+      allow read, write: if request.auth != null && (
+        request.auth.uid == userId || 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+    
+    match /sections/{sectionId} {
+      allow read: if true;
+      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    match /cards/{cardId} {
+      allow read: if true;
+      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if true; // 익명 댓글 허용
+      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    match /votes/{voteId} {
+      allow read: if true;
+      allow create: if true; // 익명 참여 허용
+    }
+    
+    match /independent_polls/{pollId} {
+      allow read: if true;
+      allow write: if true; // 투표 업데이트 및 생성을 위해 우선 허용 (운영 시 admin 체크 필요)
+    }
+    
+    // 👉 [수정됨] 멘토링 슬롯 규칙
+    match /mentoring_slots/{slotId} {
+      allow read: if true;
+      // 생성과 삭제는 관리자(강사)만 가능
+      allow create, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // 슬롯 업데이트(예약 상태 변경)는 로그인한 수강생도 가능하도록 분리하여 허용
+      allow update: if request.auth != null; 
+    }
+    
+    // 👉 [수정됨] 예약(bookings) 규칙
+    match /bookings/{bookingId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && (resource.data.menteeId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      
+      // 예약 승인/거절 등 업데이트는 관리자(강사)만 가능
+      allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // 예약 삭제(취소)는 관리자이거나 '본인이 한 예약'일 때만 허용
+      allow delete: if request.auth != null && (resource.data.menteeId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+    
+    match /lectures/{id} { allow read, write: if true; }
+    match /materials/{id} { allow read, write: if true; }
+    match /questions/{id} { allow read, write: if true; }
+  }
+}
