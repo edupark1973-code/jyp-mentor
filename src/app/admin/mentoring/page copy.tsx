@@ -5,6 +5,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, updateD
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Plus, Trash2, Calendar, Clock, Loader2, CheckCircle, XCircle, Layers, FileText, ExternalLink, User, Mail, Ban, CheckCircle2, MessageSquareText, X, MapPin } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface Slot {
   id: string;
@@ -13,6 +14,7 @@ interface Slot {
   isBooked: boolean;
   menteeName?: string;
   location?: string;
+  duration?: number;
 }
 
 interface Booking {
@@ -35,8 +37,8 @@ export default function AdminMentoringPage() {
   const [endTime, setEndTime] = useState('18:00');
   const [interval, setInterval] = useState(60); 
   const [location, setLocation] = useState('온라인 (Zoom)'); 
+  const router = useRouter(); 
   
-  // 👉 [핵심 1] user 정보를 가져오도록 추가했습니다.
   const { role, user, loading: authLoading } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -44,10 +46,16 @@ export default function AdminMentoringPage() {
   const [cancelingSlotId, setCancelingSlotId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
+  const timeOptions: string[] = [];
+  for (let i = 0; i < 24; i++) {
+    const hour = i.toString().padStart(2, '0');
+    timeOptions.push(`${hour}:00`);
+    timeOptions.push(`${hour}:30`);
+  }
+
   useEffect(() => {
     if (role !== 'admin' || !user) return;
 
-    // 👉 [핵심 2] 내 꼬리표(instructorUid)가 붙은 슬롯만 가져오도록 필터를 추가했습니다!
     const qSlots = query(
       collection(db, 'mentoring_slots'), 
       where('instructorUid', '==', user.uid),
@@ -100,7 +108,6 @@ export default function AdminMentoringPage() {
           location: location.trim(),
           duration: interval,
           isBooked: false,
-          // 👉 [핵심 3] 슬롯을 만들 때 내 아이디와 이름을 도장 찍어둡니다!
           instructorUid: user?.uid,
           instructorName: user?.displayName || '공용 강사',
           createdAt: new Date().toISOString()
@@ -124,16 +131,45 @@ export default function AdminMentoringPage() {
     await deleteDoc(doc(db, 'mentoring_slots', id));
   };
 
+  // 👉 [수정됨] 수락 시 구글 캘린더 연동 + 에러 탐지 강화
   const handleAcceptBooking = async (bookingId: string) => {
-    if (!confirm('해당 예약을 수락하시겠습니까?')) return;
+    if (!confirm('해당 예약을 수락하시겠습니까? (수락 시 구글 캘린더에 자동 등록됩니다)')) return;
+
     try {
       await updateDoc(doc(db, 'bookings', bookingId), {
         status: 'accepted'
       });
-      alert('예약이 수락되었습니다.');
-    } catch (error) {
+
+      const booking = bookings.find(b => b.id === bookingId);
+      const slot = slots.find(s => s.id === booking?.slotId);
+
+      if (booking && slot) {
+        const response = await fetch('/api/calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: slot.date,
+            time: slot.time,
+            duration: slot.duration || 60,
+            menteeName: booking.menteeName,
+            location: slot.location,
+            requestText: booking.requestText,
+            calendarId: 'fd8dba786b6aeebdabda4191e5591b1580a66f5a1dcad94e288a7ca68ece2df2@group.calendar.google.com' 
+          }),
+        });
+
+        // 🚨 API 호출 실패 시 에러를 억지로 통과시키지 않고 에러를 발생시킵니다.
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '구글 캘린더 API 연동에 실패했습니다.');
+        }
+      }
+
+      alert('예약이 수락되었으며, 구글 캘린더에 정상적으로 등록되었습니다! 🎉');
+    } catch (error: any) {
       console.error('Accept booking error:', error);
-      alert('예약 수락 중 오류가 발생했습니다.');
+      // 구글 API가 거절한 진짜 이유를 팝업으로 띄워줍니다.
+      alert(`[캘린더 연동 실패] ${error.message}\nVS Code 터미널 창의 에러 로그를 확인해주세요!`);
     }
   };
 
@@ -189,7 +225,14 @@ export default function AdminMentoringPage() {
   };
 
   if (authLoading) return null;
-  if (role !== 'admin') return <div className="p-6 text-red-500">권한이 없습니다.</div>;
+  if (role !== 'admin') {
+    setTimeout(() => router.push('/'), 1000);
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <p className="text-lg font-bold text-slate-500">권한이 없습니다. 메인 화면으로 이동합니다...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto p-6 text-slate-900">
@@ -222,23 +265,29 @@ export default function AdminMentoringPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">시작 시간</label>
-                <input 
-                  type="time" 
+                <select 
                   required
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                >
+                  {timeOptions.map(time => (
+                    <option key={`start-${time}`} value={time}>{time}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">종료 시간</label>
-                <input 
-                  type="time" 
+                <select 
                   required
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                />
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                >
+                  {timeOptions.map(time => (
+                    <option key={`end-${time}`} value={time}>{time}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -259,7 +308,7 @@ export default function AdminMentoringPage() {
               <select 
                 value={interval}
                 onChange={(e) => setInterval(Number(e.target.value))}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
               >
                 <option value={30}>30분 단위</option>
                 <option value={60}>1시간 단위</option>

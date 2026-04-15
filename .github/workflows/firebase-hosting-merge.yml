@@ -29,3 +29,6 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JYP_MENTOR }}
           channelId: live
           projectId: jyp-mentor
+        # 👇👇 여기가 추가된 부분입니다! (Next.js 웹 프레임워크 지원 활성화) 👇👇
+        env:
+          FIREBASE_CLI_EXPERIMENTS: webframeworks

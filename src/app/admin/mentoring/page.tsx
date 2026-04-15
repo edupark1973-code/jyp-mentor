@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, updateDoc, writeBatch, serverTimestamp, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Plus, Trash2, Calendar, Clock, Loader2, CheckCircle, XCircle, Layers, FileText, ExternalLink, User, Mail, Ban, CheckCircle2, MessageSquareText, X, MapPin } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, Loader2, CheckCircle, XCircle, Layers, FileText, ExternalLink, User, Mail, Ban, CheckCircle2, MessageSquareText, X, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface Slot {
@@ -45,6 +45,10 @@ export default function AdminMentoringPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelingSlotId, setCancelingSlotId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+
+  // 👉 [추가됨] 관리자 달력 필터링을 위한 상태
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
 
   const timeOptions: string[] = [];
   for (let i = 0; i < 24; i++) {
@@ -118,6 +122,7 @@ export default function AdminMentoringPage() {
 
       await Promise.all(promises);
       alert(`${promises.length}개의 슬롯이 생성되었습니다.`);
+      setSelectedDate(newDate); // 생성 후 해당 날짜로 이동
     } catch (error) {
       console.error('Error adding slots:', error);
       alert('슬롯 생성 중 오류가 발생했습니다.');
@@ -131,7 +136,6 @@ export default function AdminMentoringPage() {
     await deleteDoc(doc(db, 'mentoring_slots', id));
   };
 
-  // 👉 [수정됨] 수락 시 구글 캘린더 연동 + 에러 탐지 강화
   const handleAcceptBooking = async (bookingId: string) => {
     if (!confirm('해당 예약을 수락하시겠습니까? (수락 시 구글 캘린더에 자동 등록됩니다)')) return;
 
@@ -158,7 +162,6 @@ export default function AdminMentoringPage() {
           }),
         });
 
-        // 🚨 API 호출 실패 시 에러를 억지로 통과시키지 않고 에러를 발생시킵니다.
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || '구글 캘린더 API 연동에 실패했습니다.');
@@ -168,7 +171,6 @@ export default function AdminMentoringPage() {
       alert('예약이 수락되었으며, 구글 캘린더에 정상적으로 등록되었습니다! 🎉');
     } catch (error: any) {
       console.error('Accept booking error:', error);
-      // 구글 API가 거절한 진짜 이유를 팝업으로 띄워줍니다.
       alert(`[캘린더 연동 실패] ${error.message}\nVS Code 터미널 창의 에러 로그를 확인해주세요!`);
     }
   };
@@ -224,6 +226,25 @@ export default function AdminMentoringPage() {
     });
   };
 
+  // 👉 [달력 로직]
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const calendarDays = [];
+  for (let i = 0; i < firstDayOfMonth; i++) calendarDays.push(null);
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`);
+  }
+
+  const handlePrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
+  const handleNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
+
+  // 현재 필터링된 슬롯
+  const availableDates = Array.from(new Set(slots.map(s => s.date)));
+  const filteredSlots = slots.filter(s => s.date === selectedDate);
+
   if (authLoading) return null;
   if (role !== 'admin') {
     setTimeout(() => router.push('/'), 1000);
@@ -244,99 +265,151 @@ export default function AdminMentoringPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Bulk Slot Creation Form */}
-        <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl h-fit lg:sticky lg:top-24">
-          <h2 className="font-bold mb-6 flex items-center gap-2 text-blue-600">
-            <Layers size={20} />
-            슬롯 일괄 생성
-          </h2>
-          <form onSubmit={handleBulkAddSlots} className="space-y-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 날짜</label>
-              <input 
-                type="date" 
-                required
-                value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-              />
+        {/* Left Section: Creation Form & Calendar */}
+        <div className="space-y-8 h-fit lg:sticky lg:top-24">
+          {/* Bulk Slot Creation Form */}
+          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl">
+            <h2 className="font-bold mb-6 flex items-center gap-2 text-blue-600">
+              <Layers size={20} />
+              슬롯 일괄 생성
+            </h2>
+            <form onSubmit={handleBulkAddSlots} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 날짜</label>
+                <input 
+                  type="date" 
+                  required
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">시작 시간</label>
+                  <select 
+                    required
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                  >
+                    {timeOptions.map(time => (
+                      <option key={`start-${time}`} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">종료 시간</label>
+                  <select 
+                    required
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                  >
+                    {timeOptions.map(time => (
+                      <option key={`end-${time}`} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 장소 (링크 포함 가능)</label>
+                <input 
+                  type="text" 
+                  required
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="예: 온라인(Zoom), 스타트업 카페 2층"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 단위 (간격)</label>
+                <select 
+                  value={interval}
+                  onChange={(e) => setInterval(Number(e.target.value))}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                >
+                  <option value={30}>30분 단위</option>
+                  <option value={60}>1시간 단위</option>
+                  <option value={90}>1시간 30분 단위</option>
+                  <option value={120}>2시간 단위</option>
+                </select>
+              </div>
+
+              <button 
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg flex justify-center items-center gap-2 mt-4"
+              >
+                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
+                슬롯 일괄 생성하기
+              </button>
+            </form>
+          </section>
+
+          {/* Mini Calendar Filter */}
+          <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
+              <h3 className="font-black text-lg text-slate-900">{year}년 {month + 1}월</h3>
+              <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronRight size={20} className="text-slate-600"/></button>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">시작 시간</label>
-                <select 
-                  required
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
-                >
-                  {timeOptions.map(time => (
-                    <option key={`start-${time}`} value={time}>{time}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">종료 시간</label>
-                <select 
-                  required
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
-                >
-                  {timeOptions.map(time => (
-                    <option key={`end-${time}`} value={time}>{time}</option>
-                  ))}
-                </select>
-              </div>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-slate-400 mb-4">
+              <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
             </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 장소 (링크 포함 가능)</label>
-              <input 
-                type="text" 
-                required
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="예: 온라인(Zoom), 스타트업 카페 2층"
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none font-medium"
-              />
+            
+            <div className="grid grid-cols-7 gap-y-1">
+              {calendarDays.map((dateStr, i) => {
+                if (!dateStr) return <div key={`empty-${i}`} className="p-2"></div>;
+                
+                const hasSlot = availableDates.includes(dateStr);
+                const isSelected = selectedDate === dateStr;
+                const day = new Date(dateStr).getDate();
+                
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => setSelectedDate(dateStr)}
+                    className={`w-9 h-9 mx-auto rounded-full flex flex-col items-center justify-center text-sm font-bold transition-all relative ${
+                      isSelected ? 'bg-blue-600 text-white shadow-md' :
+                      hasSlot ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' :
+                      'text-slate-400 hover:bg-slate-50'
+                    }`}
+                  >
+                    {day}
+                    {hasSlot && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-blue-400 rounded-full"></div>}
+                  </button>
+                );
+              })}
             </div>
+          </section>
+        </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 단위 (간격)</label>
-              <select 
-                value={interval}
-                onChange={(e) => setInterval(Number(e.target.value))}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
-              >
-                <option value={30}>30분 단위</option>
-                <option value={60}>1시간 단위</option>
-                <option value={90}>1시간 30분 단위</option>
-                <option value={120}>2시간 단위</option>
-              </select>
-            </div>
-
-            <button 
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg flex justify-center items-center gap-2 mt-4"
-            >
-              {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
-              슬롯 일괄 생성하기
-            </button>
-          </form>
-        </section>
-
-        {/* Slot List */}
+        {/* Right Section: Slot List */}
         <section className="lg:col-span-2">
-          <h2 className="font-bold text-slate-800 mb-6 flex items-center gap-2">
-            <Calendar size={20} className="text-slate-400" />
-            현재 등록된 슬롯 목록 ({slots.length})
+          <h2 className="font-bold text-slate-800 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar size={20} className="text-slate-400" />
+              {selectedDate} 일정 목록 ({filteredSlots.length})
+            </div>
+            {selectedDate && (
+              <button 
+                onClick={() => setSelectedDate(null)} 
+                className="text-xs text-slate-400 hover:text-blue-500 font-bold"
+              >
+                전체보기
+              </button>
+            )}
           </h2>
+
           <div className="space-y-4">
-            {slots.length > 0 ? (
-              slots.map((slot) => {
+            {(selectedDate ? filteredSlots : slots).length > 0 ? (
+              (selectedDate ? filteredSlots : slots).map((slot) => {
                 const booking = bookings.find(b => b.slotId === slot.id && b.status !== 'canceled');
                 return (
                   <div key={slot.id} className={`p-6 rounded-[2rem] border transition-all ${slot.isBooked ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100 hover:border-blue-200 shadow-sm'}`}>
@@ -438,7 +511,7 @@ export default function AdminMentoringPage() {
               })
             ) : (
               <div className="py-24 text-center text-slate-400 bg-white rounded-3xl border-2 border-dashed border-slate-100">
-                등록된 슬롯이 없습니다. 왼쪽 양식을 통해 슬롯을 생성하세요.
+                {selectedDate ? `${selectedDate}에 등록된 슬롯이 없습니다.` : '등록된 슬롯이 없습니다.'}
               </div>
             )}
           </div>
@@ -475,7 +548,7 @@ export default function AdminMentoringPage() {
                 거절 및 취소 완료
               </button>
               <button 
-                onClick={() => setShowCancelModal(false)}
+                onClick={() => setShowCancelModal(false)} 
                 className="px-8 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
               >
                 닫기

@@ -35,7 +35,12 @@ function MentoringContent() {
   const { user, loading: authLoading } = useAuthStore();
 
   useEffect(() => {
-    const q = query(collection(db, 'mentoring_slots'), where('isBooked', '==', false), orderBy('date'), orderBy('time'));
+    const q = query(
+      collection(db, 'mentoring_slots'), 
+      where('isBooked', '==', false), 
+      orderBy('date'), 
+      orderBy('time')
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSlots(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Slot[]);
     });
@@ -78,7 +83,7 @@ function MentoringContent() {
         businessPlanName: fileName,
         requestText: requestText.trim() || null,
         status: 'pending',
-        instructorName: selectedSlot.instructorName || '강사', 
+        instructorName: selectedSlot.instructorName || '멘토', 
         createdAt: serverTimestamp(),
       };
 
@@ -142,7 +147,7 @@ function MentoringContent() {
   const uniqueInstructors = Array.from(new Set(slots.map(s => s.instructorUid))).map(uid => {
     const slot = slots.find(s => s.instructorUid === uid);
     const slotsCount = slots.filter(s => s.instructorUid === uid).length;
-    return { uid, name: slot?.instructorName || '알 수 없는 강사', slotsCount };
+    return { uid, name: slot?.instructorName || '알 수 없는 멘토', slotsCount };
   }).filter(inst => inst.uid);
 
   const instructorSlots = slots.filter(s => s.instructorUid === selectedInstructorUid);
@@ -212,7 +217,7 @@ function MentoringContent() {
                         <User size={32} />
                       </div>
                       <div>
-                        <h2 className="text-2xl font-black text-slate-900 group-hover:text-blue-600 transition-colors">{instructor.name} 강사님</h2>
+                        <h2 className="text-2xl font-black text-slate-900 group-hover:text-blue-600 transition-colors">{instructor.name} 멘토</h2>
                         <p className="text-slate-400 font-bold text-sm mt-1">예약 가능 일정: <span className="text-blue-500">{instructor.slotsCount}</span>개</p>
                       </div>
                     </div>
@@ -222,7 +227,7 @@ function MentoringContent() {
                 
                 {uniqueInstructors.length === 0 && (
                   <div className="col-span-full py-16 text-center text-slate-400 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 font-bold">
-                    현재 멘토링 가능한 강사님이 없습니다.
+                    현재 멘토링 가능한 멘토가 없습니다.
                   </div>
                 )}
               </div>
@@ -407,7 +412,7 @@ function MentoringContent() {
                       <div className="flex flex-col gap-1.5 font-bold">
                         <div className="flex items-center gap-1"><Clock size={12} /> {b.time}</div>
                         {b.instructorName && (
-                          <div className="flex items-center gap-1 text-slate-300"><User size={12} /> {b.instructorName} 강사님</div>
+                          <div className="flex items-center gap-1 text-slate-300"><User size={12} /> {b.instructorName} 멘토</div>
                         )}
                       </div>
                       {b.status === 'pending' && (

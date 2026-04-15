@@ -5,7 +5,7 @@ import { collection, query, where, orderBy, onSnapshot, addDoc, doc, updateDoc, 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Calendar, Clock, Upload, FileText, CheckCircle, Loader2, X, ChevronLeft, MessageSquareText, AlertCircle, MapPin, User, ArrowRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Upload, FileText, CheckCircle, Loader2, ChevronLeft, ChevronRight, MessageSquareText, AlertCircle, MapPin, User, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface Slot {
@@ -14,7 +14,6 @@ interface Slot {
   time: string;
   isBooked: boolean;
   location?: string;
-  // 👉 [추가] 강사 구분용 꼬리표
   instructorUid?: string; 
   instructorName?: string;
 }
@@ -28,40 +27,30 @@ function MentoringContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [myBookings, setMyBookings] = useState<any[]>([]);
   
-  // 👉 [핵심 추가] 수강생이 선택한 강사님의 UID 상태
   const [selectedInstructorUid, setSelectedInstructorUid] = useState<string | null>(null);
+  
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const { user, loading: authLoading } = useAuthStore();
 
-  // 1. 예약 가능한 슬롯 실시간 감시
   useEffect(() => {
-    const q = query(
-      collection(db, 'mentoring_slots'), 
-      where('isBooked', '==', false), 
-      orderBy('date'), 
-      orderBy('time')
-    );
+    const q = query(collection(db, 'mentoring_slots'), where('isBooked', '==', false), orderBy('date'), orderBy('time'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSlots(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Slot[]);
     });
     return () => unsubscribe();
   }, []);
 
-  // 2. 나의 예약 현황 실시간 감시
   useEffect(() => {
     if (!user) return;
-    const q = query(
-      collection(db, 'bookings'), 
-      where('menteeId', '==', user.uid), 
-      orderBy('createdAt', 'desc')
-    );
+    const q = query(collection(db, 'bookings'), where('menteeId', '==', user.uid), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setMyBookings(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     });
     return () => unsubscribe();
   }, [user]);
 
-  // 3. 예약 신청 로직
   const handleBooking = async () => {
     if (!user || !selectedSlot) return;
     setIsSubmitting(true);
@@ -89,7 +78,6 @@ function MentoringContent() {
         businessPlanName: fileName,
         requestText: requestText.trim() || null,
         status: 'pending',
-        // 예약 내역에도 강사 이름을 남기면 좋습니다.
         instructorName: selectedSlot.instructorName || '강사', 
         createdAt: serverTimestamp(),
       };
@@ -102,10 +90,9 @@ function MentoringContent() {
 
       alert('멘토링 예약이 완료되었습니다!');
       setSelectedSlot(null);
+      setSelectedDate(null);
       setFile(null);
       setRequestText('');
-      // 예약 후 강사 선택 목록으로 돌아가려면 아래 주석 해제
-      // setSelectedInstructorUid(null); 
     } catch (error) {
       console.error('Booking error:', error);
       alert('예약 처리 중 오류가 발생했습니다.');
@@ -114,10 +101,8 @@ function MentoringContent() {
     }
   };
 
-  // 4. 예약 취소 로직
   const handleCancelBooking = async (bookingId: string, slotId: string) => {
     if (!confirm('예약을 취소하시겠습니까?')) return;
-    
     try {
       await deleteDoc(doc(db, 'bookings', bookingId));
       await updateDoc(doc(db, 'mentoring_slots', slotId), {
@@ -131,7 +116,6 @@ function MentoringContent() {
     }
   };
 
-  // 5. 거절된 내역 확인 후 리스트에서 제거
   const handleDismissCanceled = async (bookingId: string) => {
     try {
       await deleteDoc(doc(db, 'bookings', bookingId));
@@ -140,47 +124,55 @@ function MentoringContent() {
     }
   };
 
-  // URL 링크 활성화 함수
   const renderTextWithLinks = (text: string) => {
     if (!text) return null;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     return text.split(urlRegex).map((part, index) => {
       if (part.match(urlRegex)) {
-        return (
-          <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-all">
-            {part}
-          </a>
-        );
+        return <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-all">{part}</a>;
       }
       return part;
     });
   };
 
   if (authLoading) return (
-    <div className="h-screen flex items-center justify-center bg-white">
-      <Loader2 className="animate-spin text-blue-600" size={40} />
-    </div>
+    <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" size={40} /></div>
   );
 
-  // 👉 [로직 추가] 현재 열려있는 슬롯들을 바탕으로 강사 목록을 추출합니다.
   const uniqueInstructors = Array.from(new Set(slots.map(s => s.instructorUid))).map(uid => {
     const slot = slots.find(s => s.instructorUid === uid);
     const slotsCount = slots.filter(s => s.instructorUid === uid).length;
     return { uid, name: slot?.instructorName || '알 수 없는 강사', slotsCount };
-  }).filter(inst => inst.uid); // uid가 있는 정상 데이터만 필터링
+  }).filter(inst => inst.uid);
 
-  // 👉 선택된 강사님의 슬롯만 필터링합니다.
   const instructorSlots = slots.filter(s => s.instructorUid === selectedInstructorUid);
+  
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const calendarDays = [];
+  for (let i = 0; i < firstDayOfMonth; i++) calendarDays.push(null);
+  for (let i = 1; i <= daysInMonth; i++) {
+    calendarDays.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`);
+  }
+
+  const availableDates = Array.from(new Set(instructorSlots.map(s => s.date)));
+  const availableTimesForSelectedDate = instructorSlots.filter(s => s.date === selectedDate);
+
+  const handlePrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
+  const handleNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
 
   return (
     <div className="max-w-6xl mx-auto p-6 md:p-12">
       <header className="flex items-center gap-4 mb-12 relative">
         <button 
           onClick={() => {
-            // 강사 선택 모드라면 뒤로가기 대신 강사 목록으로 돌아가게 처리
             if (selectedInstructorUid) {
               setSelectedInstructorUid(null);
               setSelectedSlot(null);
+              setSelectedDate(null);
             } else {
               router.push('/');
             }
@@ -202,14 +194,17 @@ function MentoringContent() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 space-y-12">
           
-          {/* 👉 [STEP 0: 강사 선택 화면] 강사를 아직 안 골랐을 때 노출됩니다 */}
           {!selectedInstructorUid && (
             <section className="animate-in fade-in slide-in-from-bottom-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {uniqueInstructors.map(instructor => (
                   <div 
                     key={instructor.uid} 
-                    onClick={() => setSelectedInstructorUid(instructor.uid as string)}
+                    onClick={() => {
+                      setSelectedInstructorUid(instructor.uid as string);
+                      setSelectedDate(null);
+                      setSelectedSlot(null);
+                    }}
                     className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group flex items-center justify-between"
                   >
                     <div className="flex items-center gap-5">
@@ -234,53 +229,97 @@ function MentoringContent() {
             </section>
           )}
 
-          {/* 👇 여기서부터는 원래 강사님이 만드신 기존 UI 로직이 그대로 이어집니다 (단, 선택된 강사 일정만 보임) */}
           {selectedInstructorUid && (
             <div className="space-y-12 animate-in fade-in slide-in-from-right-8">
-              {/* Step 1: 시간 선택 */}
+              
               <section>
                 <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900">
                   <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm">1</span>
-                  상담 시간 선택
+                  날짜 및 시간 선택
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {instructorSlots.length > 0 ? (
-                    instructorSlots.map((slot) => (
-                      <button
-                        key={slot.id}
-                        onClick={() => setSelectedSlot(slot)}
-                        className={`p-5 rounded-[2rem] border-2 text-left transition-all ${
-                          selectedSlot?.id === slot.id 
-                            ? 'border-blue-600 bg-blue-50 ring-4 ring-blue-50/50' 
-                            : 'border-slate-100 bg-white hover:border-blue-200 shadow-sm'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          <Calendar size={18} className={selectedSlot?.id === slot.id ? 'text-blue-600' : 'text-slate-400'} />
-                          <span className="font-bold">{slot.date}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-sm text-slate-500 font-medium mb-3">
-                          <Clock size={16} />
-                          {slot.time}
-                        </div>
-                        <div className={`flex items-center gap-2 p-2 rounded-xl text-[11px] font-bold ${
-                          selectedSlot?.id === slot.id ? 'bg-blue-600/10 text-blue-600' : 'bg-slate-50 text-slate-400'
-                        }`}>
-                          <MapPin size={12} />
-                          <span className="truncate">{slot.location || '장소 미지정'}</span>
-                        </div>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="col-span-full py-16 text-center text-slate-400 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 font-bold">
-                      현재 예약 가능한 슬롯이 없습니다.
+                
+                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col md:flex-row">
+                  
+                  <div className="p-8 md:w-1/2 md:border-r border-slate-100 bg-white">
+                    <div className="flex items-center justify-between mb-6">
+                      <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
+                      <h3 className="font-black text-lg text-slate-900">{year}년 {month + 1}월</h3>
+                      <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronRight size={20} className="text-slate-600"/></button>
                     </div>
-                  )}
+                    
+                    <div className="grid grid-cols-7 gap-2 text-center text-xs font-black text-slate-400 mb-4">
+                      <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+                    </div>
+                    
+                    <div className="grid grid-cols-7 gap-y-2 gap-x-1">
+                      {calendarDays.map((dateStr, i) => {
+                        if (!dateStr) return <div key={`empty-${i}`} className="p-2"></div>;
+                        
+                        const isAvailable = availableDates.includes(dateStr);
+                        const isSelected = selectedDate === dateStr;
+                        const day = new Date(dateStr).getDate();
+                        
+                        return (
+                          <button
+                            key={dateStr}
+                            disabled={!isAvailable}
+                            onClick={() => { setSelectedDate(dateStr); setSelectedSlot(null); }}
+                            className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold transition-all ${
+                              isSelected ? 'bg-blue-600 text-white shadow-md' :
+                              isAvailable ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' :
+                              'text-slate-300 cursor-not-allowed'
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="p-8 md:w-1/2 bg-slate-50/50">
+                    {selectedDate ? (
+                      <div className="animate-in fade-in">
+                        <p className="text-sm font-black text-slate-500 mb-4 flex items-center gap-2">
+                          <CalendarIcon size={16} /> {selectedDate}
+                        </p>
+                        <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                          {availableTimesForSelectedDate.length > 0 ? (
+                            availableTimesForSelectedDate.map(slot => (
+                              <button
+                                key={slot.id}
+                                onClick={() => setSelectedSlot(slot)}
+                                className={`w-full p-4 rounded-[1rem] border-2 transition-all flex items-center justify-between group ${
+                                  selectedSlot?.id === slot.id ? 'border-blue-600 bg-white shadow-md ring-2 ring-blue-600/20' : 'border-slate-200 bg-white hover:border-blue-300'
+                                }`}
+                              >
+                                <span className={`font-black text-lg ${selectedSlot?.id === slot.id ? 'text-blue-600' : 'text-slate-700'}`}>
+                                  {slot.time}
+                                </span>
+                                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                  selectedSlot?.id === slot.id ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-500'
+                                }`}>
+                                  <MapPin size={12}/> <span className="truncate max-w-[100px]">{slot.location || '장소 미지정'}</span>
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <p className="text-sm font-bold text-slate-400">선택한 날짜에 가능한 시간이 없습니다.</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-slate-400">
+                        <CalendarIcon size={40} className="mb-4 opacity-30 text-blue-500"/>
+                        <p className="font-bold text-slate-500">달력에서 날짜를 선택해주세요</p>
+                      </div>
+                    )}
+                  </div>
+
                 </div>
               </section>
 
-              {/* Step 2: 요청 사항 및 파일 업로드 */}
-              <section className={!selectedSlot ? 'opacity-30 pointer-events-none transition-all' : 'transition-all'}>
+              <section className={!selectedSlot ? 'opacity-30 pointer-events-none transition-all duration-500' : 'transition-all duration-500'}>
                 <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900">
                   <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm">2</span>
                   상담 요청 사항 및 파일 업로드
@@ -323,7 +362,6 @@ function MentoringContent() {
                 </div>
               </section>
 
-              {/* Step 3: 예약 완료 */}
               <section className={!selectedSlot ? 'opacity-30 pointer-events-none' : ''}>
                 <button
                   onClick={handleBooking}
@@ -339,7 +377,6 @@ function MentoringContent() {
           )}
         </div>
 
-        {/* 사이드바: 나의 예약 현황 (강사 선택 여부와 상관없이 항상 보임) */}
         <div className="space-y-6">
           <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl sticky top-8">
             <h3 className="text-lg font-black mb-8 flex items-center gap-2">
@@ -383,7 +420,6 @@ function MentoringContent() {
                       )}
                     </div>
 
-                    {/* 장소 정보 표시 */}
                     <div className="p-2.5 bg-white/5 rounded-xl border border-white/5 flex items-center gap-2 mb-2">
                       <MapPin size={12} className="text-blue-400 shrink-0" />
                       <span className="text-[11px] font-bold text-slate-300 truncate">
@@ -391,7 +427,6 @@ function MentoringContent() {
                       </span>
                     </div>
 
-                    {/* 취소 사유 표시 */}
                     {b.status === 'canceled' && (
                       <div className="mt-3 p-3 bg-red-500/10 rounded-xl border border-red-500/20 space-y-2">
                         <div className="flex items-center gap-1.5 text-[10px] font-black text-red-400 uppercase tracking-tight">
