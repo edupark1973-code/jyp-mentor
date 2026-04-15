@@ -2,11 +2,11 @@
 
 import { Suspense, useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, where, getDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, where, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock } from 'lucide-react';
+import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock, Pin, ChevronUp, ChevronDown, Pencil } from 'lucide-react';
 
 // --- 유틸리티: 이미지 압축 ---
 const compressImage = (file: File): Promise<Blob | File> => {
@@ -90,6 +90,7 @@ function HomeContent() {
   const [newLectureTitle, setNewLectureTitle] = useState('');
   const [newLectureDesc, setNewLectureDesc] = useState('');
   const [isPublic, setIsPublic] = useState(true);
+  const [allowStudentPosts, setAllowStudentPosts] = useState(false);
   
   // 강사일 때 '내 작업실'을 볼지 '전체 쇼윈도'를 볼지 결정
   const [viewMode, setViewMode] = useState<'workspace' | 'public'>('workspace');
@@ -119,9 +120,10 @@ function HomeContent() {
       instructor: user?.displayName || '공용 강사',
       instructorUid: user?.uid || 'unknown',
       isPublic: isPublic,
+      allowStudentPosts: allowStudentPosts,
       createdAt: serverTimestamp(),
     });
-    setNewLectureTitle(''); setNewLectureDesc(''); setIsAddingLecture(false); setIsPublic(true);
+    setNewLectureTitle(''); setNewLectureDesc(''); setIsAddingLecture(false); setIsPublic(true); setAllowStudentPosts(false);
   };
 
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-slate-900"><Loader2 className="animate-spin text-blue-600 w-12 h-12" /></div>;
@@ -227,6 +229,20 @@ function HomeContent() {
                     </div>
                   </div>
                 </div>
+
+                <div className={`p-5 rounded-[1.5rem] border-2 cursor-pointer transition-all flex items-center justify-between ${allowStudentPosts ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 bg-slate-50'}`} onClick={() => setAllowStudentPosts(!allowStudentPosts)}>
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl ${allowStudentPosts ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
+                      <Plus size={20} />
+                    </div>
+                    <div>
+                      <p className={`font-black ${allowStudentPosts ? 'text-indigo-900' : 'text-slate-600'}`}>{allowStudentPosts ? '수강생 카드 업로드 허용' : '강사만 업로드 가능'}</p>
+                      <p className="text-xs text-slate-500 font-bold mt-1">
+                        {allowStudentPosts ? '로그인한 모든 사용자가 보드에 카드를 올릴 수 있습니다.' : '강사 계정으로 로그인한 유저만 카드를 생성할 수 있습니다.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-4 mt-10">
@@ -248,12 +264,24 @@ function Board({ lecture, role, onBack }: any) {
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [previewMedia, setPreviewMedia] = useState<{url: string, type: string} | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPublic, setIsPublic] = useState(lecture.isPublic !== false);
+  const [allowStudentPosts, setAllowStudentPosts] = useState(!!lecture.allowStudentPosts);
 
   useEffect(() => {
     const sq = query(collection(db, 'sections'), where('lectureId', '==', lecture.id));
     const unsubS = onSnapshot(sq, (s) => setSections(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))));
     const cq = query(collection(db, 'cards'), where('lectureId', '==', lecture.id));
-    const unsubC = onSnapshot(cq, (s) => setCards(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))));
+    const unsubC = onSnapshot(cq, (s) => {
+      const fetchedCards = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      const sortedCards = fetchedCards.sort((a: any, b: any) => {
+        if (a.isPinned !== b.isPinned) {
+          return b.isPinned ? 1 : -1; // Correctly place pinned cards (b) before unpinned cards (a)
+        }
+        return (a.order || 0) - (b.order || 0);
+      });
+      setCards(sortedCards);
+    });
     return () => { unsubS(); unsubC(); };
   }, [lecture.id]);
 
@@ -261,6 +289,11 @@ function Board({ lecture, role, onBack }: any) {
     if (!newSectionTitle.trim()) return;
     await addDoc(collection(db, 'sections'), { lectureId: lecture.id, title: newSectionTitle, createdAt: serverTimestamp() });
     setNewSectionTitle(''); setIsAddingSection(false);
+  };
+
+  const updateLectureSettings = async () => {
+    await updateDoc(doc(db, 'lectures', lecture.id), { isPublic, allowStudentPosts });
+    setIsSettingsOpen(false);
   };
 
   return (
@@ -275,11 +308,14 @@ function Board({ lecture, role, onBack }: any) {
         </div>
         
         <div className="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-1">
+          {role === 'admin' && (
+            <button onClick={() => setIsSettingsOpen(true)} className="px-5 py-2.5 bg-slate-800 text-white rounded-2xl font-black text-sm transition-all hover:bg-slate-700">강좌 설정</button>
+          )}
           <button 
             onClick={() => {
               const inviteLink = `${window.location.origin}/?id=${lecture.id}`;
               navigator.clipboard.writeText(inviteLink);
-              alert('수강생 초대 링크가 복사되었습니다!\n단톡방이나 채팅창에 붙여넣기 해주세요.');
+              alert('수강생 초대 링크가 복사되었습니다!');
             }} 
             className="px-5 py-2.5 bg-slate-700 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"
           >
@@ -296,9 +332,29 @@ function Board({ lecture, role, onBack }: any) {
         </div>
       </header>
 
+      {/* 설정 모달 */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-6" onClick={() => setIsSettingsOpen(false)}>
+          <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm text-slate-900" onClick={e => e.stopPropagation()}>
+            <h2 className="text-xl font-black mb-6">강좌 설정 수정</h2>
+            <div className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={isPublic} onChange={() => setIsPublic(!isPublic)} className="w-5 h-5 accent-blue-600" />
+                <span className="font-bold">메인 페이지 공개</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={allowStudentPosts} onChange={() => setAllowStudentPosts(!allowStudentPosts)} className="w-5 h-5 accent-indigo-600" />
+                <span className="font-bold">수강생 카드 업로드 허용</span>
+              </label>
+            </div>
+            <button onClick={updateLectureSettings} className="w-full mt-8 py-3 bg-blue-600 text-white rounded-xl font-black">저장</button>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 overflow-x-auto p-8 flex gap-8 items-start custom-scrollbar">
         {sections.map(section => (
-          <Section key={section.id} section={section} cards={cards.filter(c => c.sectionId === section.id)} role={role} onPreview={setPreviewMedia} />
+          <Section key={section.id} section={section} lecture={lecture} cards={cards.filter(c => c.sectionId === section.id)} role={role} onPreview={setPreviewMedia} />
         ))}
         {isAddingSection && (
           <div className="w-80 flex-shrink-0 bg-white/10 rounded-[2rem] p-5 border border-white/10 backdrop-blur-xl animate-in fade-in">
@@ -339,7 +395,7 @@ function Board({ lecture, role, onBack }: any) {
 }
 
 // --- 섹션 (리스트) ---
-function Section({ section, cards, role, onPreview }: any) {
+function Section({ section, lecture, cards, role, onPreview }: any) {
   const [isAdding, setIsAdding] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -348,6 +404,7 @@ function Section({ section, cards, role, onPreview }: any) {
   const [isUploading, setIsUploading] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuthStore();
 
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
@@ -372,14 +429,35 @@ function Section({ section, cards, role, onPreview }: any) {
 
   const handleSubmit = async () => {
     if (!title.trim() && !fileData && !linkUrl.trim()) return;
+    // 새 카드의 기본 order는 현재 섹션 카드들 중 가장 작은 order - 1 (가장 위로)
+    const currentMinOrder = cards.length > 0 ? Math.min(...cards.map((c: any) => c.order || 0)) : 0;
     await addDoc(collection(db, 'cards'), {
       lectureId: section.lectureId, sectionId: section.id, title, content,
       linkUrl: linkUrl.trim() || null, fileUrl: fileData?.url || null,
       fileName: fileData?.name || null, fileType: fileData?.type || null,
-      instructor: auth.currentUser?.displayName || '익명', createdAt: serverTimestamp()
+      instructor: role === 'admin' ? '강사' : (user?.displayName || '수강생'),
+      isPinned: false,
+      order: currentMinOrder - 1,
+      createdAt: serverTimestamp()
     });
     setTitle(''); setContent(''); setLinkUrl(''); setFileData(null); setIsAdding(false); setShowLinkInput(false);
   };
+
+  const canAddCard = role === 'admin' || (lecture.allowStudentPosts && user);
+
+  async function handleMoveCard(fromIndex: number, toIndex: number) {
+    if (role !== 'admin') return;
+    const fromCard = cards[fromIndex];
+    const toCard = cards[toIndex];
+    const batch = writeBatch(db);
+    
+    // Swap order values
+    const tempOrder = fromCard.order || 0;
+    batch.update(doc(db, 'cards', fromCard.id), { order: toCard.order || 0 });
+    batch.update(doc(db, 'cards', toCard.id), { order: tempOrder });
+    
+    await batch.commit();
+  }
 
   return (
     <div className="w-80 flex-shrink-0 flex flex-col max-h-full">
@@ -388,7 +466,7 @@ function Section({ section, cards, role, onPreview }: any) {
         {role === 'admin' && <button onClick={() => deleteDoc(doc(db, 'sections', section.id))} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button>}
       </div>
       <div className="flex-1 overflow-y-auto space-y-5 pr-3 custom-scrollbar text-slate-900 pb-20">
-        {role === 'admin' && !isAdding && (
+        {canAddCard && !isAdding && (
           <button onClick={() => setIsAdding(true)} className="w-full py-5 border-2 border-dashed border-white/5 rounded-[2rem] flex items-center justify-center text-slate-600 hover:border-pink-500/50 hover:text-pink-500 hover:bg-pink-500/5 transition-all group">
             <Plus size={28} className="group-hover:rotate-90 transition-all duration-300" />
           </button>
@@ -431,17 +509,29 @@ function Section({ section, cards, role, onPreview }: any) {
             </div>
           </div>
         )}
-        {cards.map((card: any) => <Card key={card.id} card={card} role={role} onPreview={onPreview} />)}
+        {cards.map((card: any, index: number) => (
+          <Card 
+            key={card.id} 
+            card={card} 
+            role={role} 
+            onPreview={onPreview}
+            onMoveUp={index > 0 ? () => handleMoveCard(index, index - 1) : null}
+            onMoveDown={index < cards.length - 1 ? () => handleMoveCard(index, index + 1) : null}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
 // --- 카드 (게시물) ---
-function Card({ card, role, onPreview }: any) {
+function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
   const [comments, setComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isCopied, setIsCopied] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(card.title || '');
+  const [editedContent, setEditedContent] = useState(card.content || '');
   const { user } = useAuthStore();
 
   useEffect(() => {
@@ -463,6 +553,21 @@ function Card({ card, role, onPreview }: any) {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  const togglePin = async () => {
+    if (role !== 'admin') return;
+    await updateDoc(doc(db, 'cards', card.id), { isPinned: !card.isPinned });
+  };
+
+  const handleUpdateCard = async () => {
+    if (role !== 'admin') return;
+    await updateDoc(doc(db, 'cards', card.id), {
+      title: editedTitle,
+      content: editedContent,
+      updatedAt: serverTimestamp()
+    });
+    setIsEditing(false);
+  };
+
   const renderContentWithLinks = (content: string) => {
     if (!content) return null;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -475,18 +580,57 @@ function Card({ card, role, onPreview }: any) {
   };
 
   return (
-    <div className="bg-white rounded-[2rem] shadow-sm group hover:-translate-y-1.5 transition-all border border-slate-100 p-6 text-slate-900 mb-5 w-full overflow-hidden">
+    <div className={`bg-white rounded-[2rem] shadow-sm group hover:-translate-y-1.5 transition-all border p-6 text-slate-900 mb-5 w-full overflow-hidden relative ${card.isPinned ? 'border-blue-500 shadow-blue-100 ring-2 ring-blue-500/10' : 'border-slate-100'}`}>
+      {card.isPinned && (
+        <div className="absolute top-0 right-0 p-3">
+          <Pin size={16} className="text-blue-500 fill-blue-500" />
+        </div>
+      )}
+      
       <div className="flex justify-between items-center mb-4">
-         <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{card.instructor}</span>
+         <div className="flex items-center gap-2">
+           <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{card.instructor}</span>
+           {card.isPinned && <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Pinned</span>}
+         </div>
          <div className="flex items-center gap-1">
+           {role === 'admin' && (
+             <div className="flex items-center gap-1 mr-2 border-r pr-2 border-slate-100">
+               <button onClick={togglePin} className={`p-1.5 rounded-lg transition-all ${card.isPinned ? 'text-blue-500 bg-blue-50' : 'text-slate-300 hover:bg-slate-50'}`} title="상단 고정">
+                 <Pin size={14}/>
+               </button>
+               <div className="flex flex-col gap-0.5">
+                 {onMoveUp && <button onClick={onMoveUp} className="text-slate-300 hover:text-blue-500 transition-colors" title="위로 이동"><ChevronUp size={14}/></button>}
+                 {onMoveDown && <button onClick={onMoveDown} className="text-slate-300 hover:text-blue-500 transition-colors" title="아래로 이동"><ChevronDown size={14}/></button>}
+               </div>
+             </div>
+           )}
            <button onClick={handleCopy} className={`p-2 rounded-xl transition-all ${isCopied ? 'text-green-500' : 'text-slate-200 hover:text-slate-400'}`} title="내용 복사">
              {isCopied ? <Check size={16}/> : <Copy size={16}/>}
            </button>
+           {role === 'admin' && (
+             isEditing ? (
+               <div className="flex items-center gap-1">
+                 <button onClick={handleUpdateCard} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors" title="저장"><Check size={16}/></button>
+                 <button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors" title="취소"><X size={16}/></button>
+               </div>
+             ) : (
+               <button onClick={() => setIsEditing(true)} className="p-2 text-slate-200 hover:text-blue-500 transition-all" title="편집"><Pencil size={16}/></button>
+             )
+           )}
            {role === 'admin' && <button onClick={() => { if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'cards', card.id)) }} className="text-slate-200 hover:text-red-500 transition-all"><Trash2 size={16}/></button>}
          </div>
       </div>
-      {card.title && <h4 className="font-black text-lg mb-2 leading-tight tracking-tight text-slate-900 break-words">{card.title}</h4>}
-      {card.content && <p className="text-[14px] text-slate-500 mb-4 whitespace-pre-wrap leading-relaxed font-bold text-slate-600 break-words">{renderContentWithLinks(card.content)}</p>}
+      {isEditing ? (
+        <>
+          <input value={editedTitle} onChange={e => setEditedTitle(e.target.value)} className="w-full font-black text-lg mb-2 leading-tight tracking-tight text-slate-900 break-words outline-none border-b border-slate-200 focus:border-blue-500" />
+          <textarea value={editedContent} onChange={e => setEditedContent(e.target.value)} className="w-full text-[14px] text-slate-500 mb-4 whitespace-pre-wrap leading-relaxed font-bold text-slate-600 break-words outline-none min-h-[100px] border-b border-slate-200 focus:border-blue-500" />
+        </>
+      ) : (
+        <>
+          {card.title && <h4 className="font-black text-lg mb-2 leading-tight tracking-tight text-slate-900 break-words">{card.title}</h4>}
+          {card.content && <p className="text-[14px] text-slate-500 mb-4 whitespace-pre-wrap leading-relaxed font-bold text-slate-600 break-words">{renderContentWithLinks(card.content)}</p>}
+        </>
+      )}
       
       <div className="space-y-3 mb-4">
         {/* PDF/이미지 뷰어 썸네일 */}

@@ -41,30 +41,30 @@ export default function Navbar() {
   return (
     <nav className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto flex justify-between items-center">
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-4 md:gap-8">
           <Link href="/" className="text-xl font-bold text-blue-600 italic">
             EduReport
           </Link>
           
-          <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-            <Link href="/" className="hover:text-blue-600 transition-colors font-bold">홈 (전체 강좌)</Link>
-            <Link href="/mentoring" className="hover:text-blue-600 transition-colors font-bold">멘토링 예약</Link>
+          <div className="flex items-center gap-4 md:gap-6 text-xs md:text-sm font-medium text-slate-600">
+            <Link href="/" className="hover:text-blue-600 transition-colors font-bold whitespace-nowrap">홈</Link>
+            <Link href="/mentoring" className="hover:text-blue-600 transition-colors font-bold whitespace-nowrap">멘토링 예약</Link>
           </div>
         </div>
         
-        <div className="flex items-center gap-6 text-sm font-medium text-slate-600">
+        <div className="flex items-center gap-3 md:gap-6 text-sm font-medium text-slate-600">
           {role === 'admin' && (
-            <div className="flex items-center gap-4 border-l pl-6 border-slate-200">
-              <Link href="/admin/mentoring" className="text-slate-500 hover:text-blue-600 transition-colors font-bold">멘토링 관리</Link>
+            <div className="flex items-center gap-3 md:gap-4 border-l pl-4 md:pl-6 border-slate-200">
+              <Link href="/admin/mentoring" className="text-slate-500 hover:text-blue-600 transition-colors font-bold whitespace-nowrap">멘토링 관리</Link>
             </div>
           )}
 
           {user ? (
-            <div className="flex items-center gap-4">
-              <span className="text-slate-500 hidden sm:inline font-bold">{user.displayName || '공용 강사'}님</span>
+            <div className="flex items-center gap-3">
+              <span className="text-slate-500 hidden md:inline font-bold">{user.displayName || '공용 강사'}님</span>
               <button 
                 onClick={() => signOut(auth)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-bold text-xs"
+                className="px-3 py-1.5 md:px-4 md:py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-bold text-[10px] md:text-xs whitespace-nowrap"
               >
                 로그아웃
               </button>
@@ -73,13 +73,13 @@ export default function Navbar() {
             <div className="flex items-center gap-2">
               <button 
                 onClick={() => setIsPublicModalOpen(true)}
-                className="px-4 py-2 text-slate-500 font-bold hover:text-slate-800 transition-colors text-xs"
+                className="px-3 py-1.5 text-slate-500 font-bold hover:text-slate-800 transition-colors text-[10px] md:text-xs"
               >
                 공용 로그인
               </button>
               <button 
                 onClick={handleGoogleLogin}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-bold text-xs"
+                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-bold text-[10px] md:text-xs whitespace-nowrap"
               >
                 구글 로그인
               </button>

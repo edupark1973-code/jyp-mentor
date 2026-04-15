@@ -267,6 +267,44 @@ export default function AdminMentoringPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Section: Creation Form & Calendar */}
         <div className="space-y-8 h-fit lg:sticky lg:top-24">
+          {/* Mini Calendar Filter */}
+          <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
+              <h3 className="font-black text-lg text-slate-900">{year}년 {month + 1}월</h3>
+              <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronRight size={20} className="text-slate-600"/></button>
+            </div>
+            
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-slate-400 mb-4">
+              <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+            </div>
+            
+            <div className="grid grid-cols-7 gap-y-1">
+              {calendarDays.map((dateStr, i) => {
+                if (!dateStr) return <div key={`empty-${i}`} className="p-2"></div>;
+                
+                const hasSlot = availableDates.includes(dateStr);
+                const isSelected = selectedDate === dateStr;
+                const day = new Date(dateStr).getDate();
+                
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => setSelectedDate(dateStr)}
+                    className={`w-9 h-9 mx-auto rounded-full flex flex-col items-center justify-center text-sm font-bold transition-all relative ${
+                      isSelected ? 'bg-blue-600 text-white shadow-md' :
+                      hasSlot ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' :
+                      'text-slate-400 hover:bg-slate-50'
+                    }`}
+                  >
+                    {day}
+                    {hasSlot && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-blue-400 rounded-full"></div>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
           {/* Bulk Slot Creation Form */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl">
             <h2 className="font-bold mb-6 flex items-center gap-2 text-blue-600">
@@ -349,44 +387,6 @@ export default function AdminMentoringPage() {
                 슬롯 일괄 생성하기
               </button>
             </form>
-          </section>
-
-          {/* Mini Calendar Filter */}
-          <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-            <div className="flex items-center justify-between mb-6">
-              <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
-              <h3 className="font-black text-lg text-slate-900">{year}년 {month + 1}월</h3>
-              <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronRight size={20} className="text-slate-600"/></button>
-            </div>
-            
-            <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-slate-400 mb-4">
-              <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
-            </div>
-            
-            <div className="grid grid-cols-7 gap-y-1">
-              {calendarDays.map((dateStr, i) => {
-                if (!dateStr) return <div key={`empty-${i}`} className="p-2"></div>;
-                
-                const hasSlot = availableDates.includes(dateStr);
-                const isSelected = selectedDate === dateStr;
-                const day = new Date(dateStr).getDate();
-                
-                return (
-                  <button
-                    key={dateStr}
-                    onClick={() => setSelectedDate(dateStr)}
-                    className={`w-9 h-9 mx-auto rounded-full flex flex-col items-center justify-center text-sm font-bold transition-all relative ${
-                      isSelected ? 'bg-blue-600 text-white shadow-md' :
-                      hasSlot ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' :
-                      'text-slate-400 hover:bg-slate-50'
-                    }`}
-                  >
-                    {day}
-                    {hasSlot && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-blue-400 rounded-full"></div>}
-                  </button>
-                );
-              })}
-            </div>
           </section>
         </div>
 
