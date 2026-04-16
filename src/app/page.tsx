@@ -214,6 +214,7 @@ function HomeContent() {
           )}
         </div>
 
+        {/* 새 강좌 생성 모달 */}
         {isAddingLecture && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setIsAddingLecture(false)}>
             <div className="bg-white rounded-[3rem] p-12 w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -280,12 +281,12 @@ function Board({ lecture, role, onBack }: any) {
     const cq = query(collection(db, 'cards'), where('lectureId', '==', lecture.id));
     const unsubC = onSnapshot(cq, (s) => {
       const fetchedCards = s.docs.map(d => ({ id: d.id, ...d.data() }));
-      // ✅ [수정] 정렬 로직 안정화
+      // ✅ [수정] 정렬 로직 안정화 (order가 같으면 createdAt 순)
       const sortedCards = fetchedCards.sort((a: any, b: any) => {
         if (a.isPinned !== b.isPinned) {
           return a.isPinned ? -1 : 1;
         }
-        return (a.order || 0) - (b.order || 0);
+        return (a.order || 0) - (b.order || 0) || (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
       });
       setCards(sortedCards);
     });
@@ -338,25 +339,6 @@ function Board({ lecture, role, onBack }: any) {
           )}
         </div>
       </header>
-
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-6" onClick={() => setIsSettingsOpen(false)}>
-          <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm text-slate-900" onClick={e => e.stopPropagation()}>
-            <h2 className="text-xl font-black mb-6">강좌 설정 수정</h2>
-            <div className="space-y-4">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={isPublic} onChange={() => setIsPublic(!isPublic)} className="w-5 h-5 accent-blue-600" />
-                <span className="font-bold">메인 페이지 공개</span>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={allowStudentPosts} onChange={() => setAllowStudentPosts(!allowStudentPosts)} className="w-5 h-5 accent-indigo-600" />
-                <span className="font-bold">수강생 카드 업로드 허용</span>
-              </label>
-            </div>
-            <button onClick={updateLectureSettings} className="w-full mt-8 py-3 bg-blue-600 text-white rounded-xl font-black">저장</button>
-          </div>
-        </div>
-      )}
 
       <main className="flex-1 overflow-x-auto p-8 flex gap-8 items-start custom-scrollbar">
         {sections.map(section => (
@@ -446,7 +428,7 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
 
   const canAddCard = role === 'admin' || (lecture.allowStudentPosts && user);
 
-  // ✅ [수정] 카드 이동 로직 보완 (ID 기반)
+  // ✅ [수정] 카드 이동 로직 보완 (ID 기반 + 동일 순서 대응)
   async function handleMoveCard(cardId: string, direction: 'up' | 'down') {
     if (role !== 'admin') return;
     const currentIndex = cards.findIndex(c => c.id === cardId);
@@ -455,17 +437,25 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
 
     const fromCard = cards[currentIndex];
     const toCard = cards[targetIndex];
+    
     if (fromCard.isPinned !== toCard.isPinned) {
       alert("고정된 카드와 일반 카드는 순서를 바꿀 수 없습니다.");
       return;
     }
 
     const batch = writeBatch(db);
+    // order가 같거나 없을 경우 인덱스를 활용해 강제로 교체
     const fromOrder = fromCard.order !== undefined ? fromCard.order : currentIndex;
     const toOrder = toCard.order !== undefined ? toCard.order : targetIndex;
 
-    batch.update(doc(db, 'cards', fromCard.id), { order: toOrder });
-    batch.update(doc(db, 'cards', toCard.id), { order: fromOrder });
+    if (fromOrder === toOrder) {
+      batch.update(doc(db, 'cards', fromCard.id), { order: targetIndex });
+      batch.update(doc(db, 'cards', toCard.id), { order: currentIndex });
+    } else {
+      batch.update(doc(db, 'cards', fromCard.id), { order: toOrder });
+      batch.update(doc(db, 'cards', toCard.id), { order: fromOrder });
+    }
+    
     await batch.commit();
   }
 
@@ -496,12 +486,6 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
                  <button onClick={handleSubmit} disabled={isUploading} className="bg-slate-900 text-white p-3 rounded-2xl shadow-lg active:scale-95 transition-all hover:bg-black">{isUploading ? <Loader2 className="animate-spin" size={20} /> : <ArrowRight size={20}/>}</button>
               </div>
             </div>
-            {showLinkInput && (
-              <div className="mt-3 p-3 bg-blue-50 rounded-xl flex items-center gap-2">
-                <LinkIcon size={16} className="text-blue-500" />
-                <input placeholder="https://..." value={linkUrl} onChange={e => setLinkUrl(e.target.value)} className="bg-transparent text-xs w-full outline-none text-blue-600 font-bold" />
-              </div>
-            )}
           </div>
         )}
         {cards.map((card: any, index: number) => (
