@@ -86,7 +86,7 @@ function LinkPreview({ url }: { url: string }) {
   );
 }
 
-// --- 메인 대시보드 (쇼윈도 & 작업실) ---
+// --- 메인 대시보드 ---
 function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -100,8 +100,6 @@ function HomeContent() {
   const [newLectureDesc, setNewLectureDesc] = useState('');
   const [isPublic, setIsPublic] = useState(true);
   const [allowStudentPosts, setAllowStudentPosts] = useState(false);
-  
-  // 강사일 때 '내 작업실'을 볼지 '전체 쇼윈도'를 볼지 결정
   const [viewMode, setViewMode] = useState<'workspace' | 'public'>('workspace');
 
   useEffect(() => {
@@ -110,14 +108,18 @@ function HomeContent() {
     return () => unsub();
   }, []);
 
+  // ✅ [수정] 내비게이션 안정화: ID가 없으면 확실하게 널 처리하여 홈으로 복귀
   useEffect(() => {
     if (lectureId) {
       getDoc(doc(db, 'lectures', lectureId)).then(s => {
-        if (s.exists()) setCurrentLecture({ id: s.id, ...s.data() });
-        else router.push('/');
+        if (s.exists()) {
+          setCurrentLecture({ id: s.id, ...s.data() });
+        } else {
+          router.replace('/'); // 없는 ID면 히스토리 꼬이지 않게 교체
+        }
       });
     } else {
-      setCurrentLecture(null);
+      setCurrentLecture(null); // ID가 없으면 무조건 보드 닫기
     }
   }, [lectureId, router]);
 
@@ -137,11 +139,11 @@ function HomeContent() {
 
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-slate-900"><Loader2 className="animate-spin text-blue-600 w-12 h-12" /></div>;
 
+  // ✅ [수정] onBack 시 push 대신 replace를 사용하여 히스토리 중복 방지
   if (lectureId && currentLecture) {
-    return <Board lecture={currentLecture} role={role} onBack={() => router.push('/')} />;
+    return <Board lecture={currentLecture} role={role} onBack={() => router.replace('/')} />;
   }
 
-  // 필터링: 강사의 작업실 모드면 내 것만, 아니면 전체 공개 강좌만
   const displayLectures = role === 'admin' && user && viewMode === 'workspace'
     ? lectures.filter(lecture => lecture.instructorUid === user.uid)
     : lectures.filter(lecture => lecture.isPublic !== false); 
@@ -168,7 +170,6 @@ function HomeContent() {
           )}
         </header>
 
-        {/* 강사용 탭 스위치 */}
         {role === 'admin' && user && (
           <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-10 w-fit backdrop-blur-sm">
             <button onClick={() => setViewMode('workspace')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${viewMode === 'workspace' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
@@ -184,7 +185,7 @@ function HomeContent() {
           {displayLectures.map((lecture) => (
             <div key={lecture.id} onClick={() => router.push(`/?id=${lecture.id}`)} className="bg-white/5 p-10 rounded-[3.5rem] border border-white/10 shadow-sm hover:shadow-2xl hover:border-blue-500/50 hover:-translate-y-2 transition-all cursor-pointer group relative overflow-hidden backdrop-blur-sm flex flex-col h-[320px]">
               {role === 'admin' && lecture.instructorUid === user?.uid && (
-                <button onClick={(e) => { e.stopPropagation(); if(confirm('삭제하시겠습니까? (첨부파일은 Storage에서 별도 삭제가 필요할 수 있습니다)')) deleteDoc(doc(db, 'lectures', lecture.id)); }} className="absolute top-8 right-8 p-2 text-slate-600 hover:text-red-500 rounded-xl transition-colors z-10"><Trash2 size={20} /></button>
+                <button onClick={(e) => { e.stopPropagation(); if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'lectures', lecture.id)); }} className="absolute top-8 right-8 p-2 text-slate-600 hover:text-red-500 rounded-xl transition-colors z-10"><Trash2 size={20} /></button>
               )}
               
               <div className="flex items-center justify-between mb-8">
@@ -208,15 +209,8 @@ function HomeContent() {
               </div>
             </div>
           ))}
-          
-          {displayLectures.length === 0 && (
-            <div className="col-span-full py-20 text-center text-slate-500 font-bold">
-              {viewMode === 'workspace' ? '아직 개설된 강좌가 없습니다. 새 강좌를 생성해 보세요!' : '현재 공개된 강좌가 없습니다.'}
-            </div>
-          )}
         </div>
 
-        {/* 새 강좌 생성 모달 */}
         {isAddingLecture && (
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setIsAddingLecture(false)}>
             <div className="bg-white rounded-[3rem] p-12 w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -232,9 +226,7 @@ function HomeContent() {
                     </div>
                     <div>
                       <p className={`font-black ${isPublic ? 'text-blue-900' : 'text-slate-600'}`}>{isPublic ? '메인 페이지에 공개' : '링크로만 접속 (비공개)'}</p>
-                      <p className="text-xs text-slate-500 font-bold mt-1">
-                        {isPublic ? '누구나 메인 화면에서 이 강좌를 볼 수 있습니다.' : '초대 링크를 받은 수강생만 접속할 수 있습니다.'}
-                      </p>
+                      <p className="text-xs text-slate-500 font-bold mt-1">{isPublic ? '누구나 메인 화면에서 이 강좌를 볼 수 있습니다.' : '초대 링크를 받은 수강생만 접속할 수 있습니다.'}</p>
                     </div>
                   </div>
                 </div>
@@ -246,14 +238,11 @@ function HomeContent() {
                     </div>
                     <div>
                       <p className={`font-black ${allowStudentPosts ? 'text-indigo-900' : 'text-slate-600'}`}>{allowStudentPosts ? '수강생 카드 업로드 허용' : '강사만 업로드 가능'}</p>
-                      <p className="text-xs text-slate-500 font-bold mt-1">
-                        {allowStudentPosts ? '로그인한 모든 사용자가 보드에 카드를 올릴 수 있습니다.' : '강사 계정으로 로그인한 유저만 카드를 생성할 수 있습니다.'}
-                      </p>
+                      <p className="text-xs text-slate-500 font-bold mt-1">{allowStudentPosts ? '로그인한 모든 사용자가 보드에 카드를 올릴 수 있습니다.' : '강사 계정으로 로그인한 유저만 카드를 생성할 수 있습니다.'}</p>
                     </div>
                   </div>
                 </div>
               </div>
-
               <div className="flex gap-4 mt-10">
                 <button onClick={addLecture} className="flex-1 bg-blue-600 text-white py-5 rounded-[1.5rem] font-black shadow-xl">생성하기</button>
                 <button onClick={() => setIsAddingLecture(false)} className="px-8 bg-slate-100 text-slate-500 py-5 rounded-[1.5rem] font-black">취소</button>
@@ -280,12 +269,14 @@ function Board({ lecture, role, onBack }: any) {
   useEffect(() => {
     const sq = query(collection(db, 'sections'), where('lectureId', '==', lecture.id));
     const unsubS = onSnapshot(sq, (s) => setSections(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))));
+    
     const cq = query(collection(db, 'cards'), where('lectureId', '==', lecture.id));
     const unsubC = onSnapshot(cq, (s) => {
       const fetchedCards = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      
       const sortedCards = fetchedCards.sort((a: any, b: any) => {
         if (a.isPinned !== b.isPinned) {
-          return b.isPinned ? 1 : -1; // Correctly place pinned cards (b) before unpinned cards (a)
+          return a.isPinned ? -1 : 1; 
         }
         return (a.order || 0) - (b.order || 0);
       });
@@ -320,16 +311,7 @@ function Board({ lecture, role, onBack }: any) {
           {role === 'admin' && (
             <button onClick={() => setIsSettingsOpen(true)} className="px-5 py-2.5 bg-slate-800 text-white rounded-2xl font-black text-sm transition-all hover:bg-slate-700">강좌 설정</button>
           )}
-          <button 
-            onClick={() => {
-              const inviteLink = `${window.location.origin}/?id=${lecture.id}`;
-              navigator.clipboard.writeText(inviteLink);
-              alert('수강생 초대 링크가 복사되었습니다!');
-            }} 
-            className="px-5 py-2.5 bg-slate-700 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"
-          >
-            <LinkIcon size={18} /> 초대 링크 복사
-          </button>
+          <button onClick={() => { const inviteLink = `${window.location.origin}/?id=${lecture.id}`; navigator.clipboard.writeText(inviteLink); alert('수강생 초대 링크가 복사되었습니다!'); }} className="px-5 py-2.5 bg-slate-700 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"><LinkIcon size={18} /> 초대 링크 복사</button>
           <button onClick={() => window.open(`/lecture/live?id=${lecture.id}`, '_blank')} className="px-5 py-2.5 bg-indigo-600 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-indigo-700 active:scale-95 whitespace-nowrap"><Maximize2 size={18} /> 라이브 모드</button>
           <button onClick={() => window.open(`/poll/live?lectureId=${lecture.id}`, '_blank')} className="px-5 py-2.5 bg-blue-600 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-blue-700 active:scale-95 whitespace-nowrap"><Vote size={18} /> 투표 참여</button>
           {role === 'admin' && (
@@ -341,7 +323,6 @@ function Board({ lecture, role, onBack }: any) {
         </div>
       </header>
 
-      {/* 설정 모달 */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-6" onClick={() => setIsSettingsOpen(false)}>
           <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm text-slate-900" onClick={e => e.stopPropagation()}>
@@ -376,7 +357,6 @@ function Board({ lecture, role, onBack }: any) {
         )}
       </main>
 
-      {/* PDF 및 이미지 모달 뷰어 */}
       {previewMedia && (
         <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-10 animate-in fade-in" onClick={() => setPreviewMedia(null)}>
             <div className="relative w-full max-w-5xl h-full flex flex-col items-center justify-center" onClick={e => e.stopPropagation()}>
@@ -388,7 +368,6 @@ function Board({ lecture, role, onBack }: any) {
                   <X size={32} />
                 </button>
               </div>
-              
               {previewMedia.type.startsWith('image/') ? (
                 <img src={previewMedia.url} alt="Preview" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" />
               ) : previewMedia.type === 'application/pdf' ? (
@@ -418,13 +397,7 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
   const handleFileUpload = async (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // 파일 용량 10MB 제한 로직 (선택적 방어)
-    if (file.size > 10 * 1024 * 1024) {
-      alert("파일 크기는 10MB를 초과할 수 없습니다.");
-      return;
-    }
-
+    if (file.size > 10 * 1024 * 1024) { alert("파일 크기는 10MB를 초과할 수 없습니다."); return; }
     setIsUploading(true);
     try {
       const processedFile = await compressImage(file);
@@ -438,7 +411,6 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
 
   const handleSubmit = async () => {
     if (!title.trim() && !fileData && !linkUrl.trim()) return;
-    // 새 카드의 기본 order는 현재 섹션 카드들 중 가장 작은 order - 1 (가장 위로)
     const currentMinOrder = cards.length > 0 ? Math.min(...cards.map((c: any) => c.order || 0)) : 0;
     await addDoc(collection(db, 'cards'), {
       lectureId: section.lectureId, sectionId: section.id, title, content,
@@ -459,20 +431,17 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
     const fromCard = cards[fromIndex];
     const toCard = cards[toIndex];
     
-    // 기존 order가 없으면 현재 index를 기본값으로 사용
+    if (fromCard.isPinned !== toCard.isPinned) {
+      alert("고정된 카드와 일반 카드는 순서를 바꿀 수 없습니다. 먼저 고정을 해제하세요.");
+      return;
+    }
+
+    const batch = writeBatch(db);
     const fromOrder = fromCard.order !== undefined ? fromCard.order : fromIndex;
     const toOrder = toCard.order !== undefined ? toCard.order : toIndex;
     
-    const batch = writeBatch(db);
-    
-    // 만약 두 카드의 order가 같다면 index를 사용하여 강제로 교체
-    if (fromOrder === toOrder) {
-      batch.update(doc(db, 'cards', fromCard.id), { order: toIndex });
-      batch.update(doc(db, 'cards', toCard.id), { order: fromIndex });
-    } else {
-      batch.update(doc(db, 'cards', fromCard.id), { order: toOrder });
-      batch.update(doc(db, 'cards', toCard.id), { order: fromOrder });
-    }
+    batch.update(doc(db, 'cards', fromCard.id), { order: toOrder });
+    batch.update(doc(db, 'cards', toCard.id), { order: fromOrder });
     
     await batch.commit();
   }
@@ -481,7 +450,7 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
     <div className="w-80 flex-shrink-0 flex flex-col max-h-full">
       <div className="flex justify-between items-center mb-6 px-3">
         <h3 className="text-white font-black text-xl tracking-tight text-slate-200">{section.title}</h3>
-        {role === 'admin' && <button onClick={() => deleteDoc(doc(db, 'sections', section.id))} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button>}
+        {role === 'admin' && <button onClick={() => {if(confirm('섹션을 삭제하시겠습니까?')) deleteDoc(doc(db, 'sections', section.id))}} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button>}
       </div>
       <div className="flex-1 overflow-y-auto space-y-5 pr-3 custom-scrollbar text-slate-900 pb-20">
         {canAddCard && !isAdding && (
@@ -502,9 +471,7 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
             {fileData && !fileData.type.startsWith('image/') && (
               <div className="mb-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center gap-3 relative">
                 <FileText size={24} className="text-blue-500" />
-                <div className="flex-1 overflow-hidden">
-                  <p className="text-xs font-black text-slate-900 truncate">{fileData.name}</p>
-                </div>
+                <div className="flex-1 overflow-hidden"><p className="text-xs font-black text-slate-900 truncate">{fileData.name}</p></div>
                 <button onClick={() => setFileData(null)} className="p-1 hover:bg-slate-200 rounded-full transition-colors"><X size={16} className="text-slate-400" /></button>
               </div>
             )}
@@ -599,12 +566,6 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
 
   return (
     <div className={`bg-white rounded-[2rem] shadow-sm group hover:-translate-y-1.5 transition-all border p-6 text-slate-900 mb-5 w-full overflow-hidden relative ${card.isPinned ? 'border-blue-500 shadow-blue-100 ring-2 ring-blue-500/10' : 'border-slate-100'}`}>
-      {card.isPinned && (
-        <div className="absolute top-0 right-0 p-3">
-          <Pin size={16} className="text-blue-500 fill-blue-500" />
-        </div>
-      )}
-      
       <div className="flex justify-between items-center mb-4">
          <div className="flex items-center gap-2">
            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{card.instructor}</span>
@@ -613,18 +574,14 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
          <div className="flex items-center gap-1">
            {role === 'admin' && (
              <div className="flex items-center gap-1 mr-2 border-r pr-2 border-slate-100">
-               <button onClick={togglePin} className={`p-1.5 rounded-lg transition-all ${card.isPinned ? 'text-blue-500 bg-blue-50' : 'text-slate-300 hover:bg-slate-50'}`} title="상단 고정">
-                 <Pin size={14}/>
-               </button>
+               <button onClick={togglePin} className={`p-1.5 rounded-lg transition-all ${card.isPinned ? 'text-blue-500 bg-blue-50' : 'text-slate-300 hover:bg-slate-50'}`} title="상단 고정"><Pin size={14}/></button>
                <div className="flex flex-col gap-0.5">
                  {onMoveUp && <button onClick={onMoveUp} className="text-slate-300 hover:text-blue-500 transition-colors" title="위로 이동"><ChevronUp size={14}/></button>}
                  {onMoveDown && <button onClick={onMoveDown} className="text-slate-300 hover:text-blue-500 transition-colors" title="아래로 이동"><ChevronDown size={14}/></button>}
                </div>
              </div>
            )}
-           <button onClick={handleCopy} className={`p-2 rounded-xl transition-all ${isCopied ? 'text-green-500' : 'text-slate-200 hover:text-slate-400'}`} title="내용 복사">
-             {isCopied ? <Check size={16}/> : <Copy size={16}/>}
-           </button>
+           <button onClick={handleCopy} className={`p-2 rounded-xl transition-all ${isCopied ? 'text-green-500' : 'text-slate-200 hover:text-slate-400'}`} title="내용 복사">{isCopied ? <Check size={16}/> : <Copy size={16}/>}</button>
            {role === 'admin' && (
              isEditing ? (
                <div className="flex items-center gap-1">
@@ -635,7 +592,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
                <button onClick={() => setIsEditing(true)} className="p-2 text-slate-200 hover:text-blue-500 transition-all" title="편집"><Pencil size={16}/></button>
              )
            )}
-           {role === 'admin' && <button onClick={() => { if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'cards', card.id)) }} className="text-slate-200 hover:text-red-500 transition-all"><Trash2 size={16}/></button>}
+           {role === 'admin' && <button onClick={() => { if(confirm('카드를 삭제하시겠습니까?')) deleteDoc(doc(db, 'cards', card.id)) }} className="text-slate-200 hover:text-red-500 transition-all"><Trash2 size={16}/></button>}
          </div>
       </div>
       {isEditing ? (
@@ -649,14 +606,10 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
           {card.content && <p className="text-[14px] text-slate-500 mb-4 whitespace-pre-wrap leading-relaxed font-bold text-slate-600 break-words">{renderContentWithLinks(card.content)}</p>}
         </>
       )}
-      
       <div className="space-y-3 mb-4">
-        {/* PDF/이미지 뷰어 썸네일 */}
         {card.fileUrl && (card.fileType?.startsWith('image/') || card.fileType === 'application/pdf') && (
           <div onClick={() => onPreview({ url: card.fileUrl, type: card.fileType })} className="relative group/file cursor-pointer rounded-2xl overflow-hidden border border-slate-100 bg-slate-50/50">
-            {card.fileType.startsWith('image/') ? (
-              <img src={card.fileUrl} alt="첨부 이미지" className="w-full h-auto group-hover/file:opacity-90 transition-opacity" />
-            ) : (
+            {card.fileType.startsWith('image/') ? ( <img src={card.fileUrl} alt="첨부 이미지" className="w-full h-auto group-hover/file:opacity-90 transition-opacity" /> ) : (
               <div className="flex flex-col items-center justify-center p-8 text-blue-500 hover:text-blue-600 transition-colors">
                 <FileText size={48} className="mb-3" />
                 <p className="text-xs font-black truncate max-w-full px-4 text-slate-700">{card.fileName}</p>
@@ -665,8 +618,6 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
             )}
           </div>
         )}
-
-        {/* 일반 다운로드 파일 */}
         {card.fileUrl && !card.fileType?.startsWith('image/') && card.fileType !== 'application/pdf' && (
           <a href={card.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:bg-slate-100 transition-all">
             <FileText size={20} className="text-slate-400" />
@@ -674,12 +625,8 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
             <Download size={18} className="text-slate-400" />
           </a>
         )}
-
-        {/* 링크 썸네일 미리보기 */}
         {card.linkUrl && <LinkPreview url={card.linkUrl} />}
       </div>
-
-      {/* 댓글 기능 */}
       <div className="pt-5 border-t border-slate-50">
         <div className="flex items-center gap-2 text-slate-300 mb-4 text-[10px] font-black uppercase tracking-widest"><MessageCircle size={16}/> {comments.length} Comments</div>
         <div className="space-y-3 mb-4 max-h-40 overflow-y-auto custom-scrollbar">
