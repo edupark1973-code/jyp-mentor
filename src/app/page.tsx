@@ -32,6 +32,15 @@ const compressImage = (file: File): Promise<Blob | File> => {
   });
 };
 
+// --- 유틸리티: 보안 이미지 URL 전환 ---
+const getSecureUrl = (url: string) => {
+  if (!url) return url;
+  if (url.startsWith('http://k.kakaocdn.net')) {
+    return url.replace('http://', 'https://');
+  }
+  return url;
+};
+
 // --- 컴포넌트: 링크 미리보기 ---
 function LinkPreview({ url }: { url: string }) {
   const [data, setData] = useState<any>(null);
@@ -63,7 +72,7 @@ function LinkPreview({ url }: { url: string }) {
     <a href={url} target="_blank" rel="noopener noreferrer" className="block border border-slate-100 rounded-2xl overflow-hidden hover:shadow-lg transition-all group bg-slate-50 cursor-pointer">
       {data.image?.url && (
         <div className="h-32 w-full overflow-hidden border-b border-slate-100/50">
-          <img src={data.image.url} alt="thumbnail" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+          <img src={getSecureUrl(data.image.url)} alt="thumbnail" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         </div>
       )}
       <div className="p-4 bg-white">
