@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { MessageSquare, Send, Pin, Trash2, User, Clock } from 'lucide-react';
+import { MessageSquare, Send, Pin, Trash2, User, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -13,6 +13,7 @@ interface Question {
   authorName: string;
   content: string;
   isPinned: boolean;
+  order: number;
   createdAt: any;
 }
 
@@ -24,11 +25,12 @@ export default function QuestionBoard({ lectureId, isLiveMode = false }: { lectu
   useEffect(() => {
     if (!lectureId) return;
 
-    // Pin된 질문을 먼저, 그 다음 최신순으로 정렬 (lectureId만 사용)
+    // Pin된 질문 우선, 그 다음 order(작은 순서) 우선, 그 다음 최신순
     const q = query(
       collection(db, 'questions'),
       where('lectureId', '==', lectureId),
       orderBy('isPinned', 'desc'),
+      orderBy('order', 'asc'),
       orderBy('createdAt', 'desc')
     );
 
@@ -44,18 +46,44 @@ export default function QuestionBoard({ lectureId, isLiveMode = false }: { lectu
     if (!newQuestion.trim() || !user) return;
 
     try {
+      // 새 질문은 현재 가장 작은 order보다 더 작은 값을 갖거나 0부터 시작
+      const minOrder = questions.length > 0 ? Math.min(...questions.map(q => q.order || 0)) : 0;
+      
       await addDoc(collection(db, 'questions'), {
-        lectureId, // lectureId만 저장
+        lectureId,
         authorId: user.uid,
         authorName: user.displayName || '익명 사용자',
         content: newQuestion,
         isPinned: false,
+        order: minOrder - 1, // 위로 쌓이게 하려면 마이너스, 아래로 쌓이게 하려면 플러스 (여기서는 위로 쌓이게 함)
         createdAt: serverTimestamp(),
       });
       setNewQuestion('');
     } catch (error) {
       console.error('Error adding question:', error);
       alert('질문 등록 중 오류가 발생했습니다.');
+    }
+  };
+
+  const moveOrder = async (index: number, direction: 'up' | 'down') => {
+    if (role !== 'admin') return;
+    
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= questions.length) return;
+
+    const currentQ = questions[index];
+    const targetQ = questions[targetIndex];
+
+    // 같은 Pin 상태일 때만 이동 가능하게 하거나, 전체 순서를 바꿀 수 있음
+    // 여기서는 화면에 보이는 순서 그대로 교체
+    try {
+      const currentOrder = currentQ.order || 0;
+      const targetOrder = targetQ.order || 0;
+
+      await updateDoc(doc(db, 'questions', currentQ.id), { order: targetOrder });
+      await updateDoc(doc(db, 'questions', targetQ.id), { order: currentOrder });
+    } catch (error) {
+      console.error('Order update error:', error);
     }
   };
 
@@ -126,7 +154,25 @@ export default function QuestionBoard({ lectureId, isLiveMode = false }: { lectu
               </p>
 
               {(role === 'admin') && (
-                <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-slate-100/50">
+                <div className="flex justify-end items-center gap-2 mt-4 pt-3 border-t border-slate-100/50">
+                  <div className="flex gap-1 mr-auto">
+                    <button 
+                      onClick={() => moveOrder(questions.indexOf(q), 'up')}
+                      disabled={questions.indexOf(q) === 0}
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-20 transition-all"
+                      title="위로 이동"
+                    >
+                      <ChevronUp size={18} />
+                    </button>
+                    <button 
+                      onClick={() => moveOrder(questions.indexOf(q), 'down')}
+                      disabled={questions.indexOf(q) === questions.length - 1}
+                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg disabled:opacity-20 transition-all"
+                      title="아래로 이동"
+                    >
+                      <ChevronDown size={18} />
+                    </button>
+                  </div>
                   <button 
                     onClick={() => togglePin(q.id, q.isPinned)}
                     className={`p-1.5 rounded-lg transition-colors ${q.isPinned ? 'text-blue-600 bg-blue-100' : 'text-slate-400 hover:bg-slate-100'}`}

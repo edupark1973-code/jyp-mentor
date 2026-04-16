@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { collection, query, where, onSnapshot, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -9,6 +9,7 @@ import { Trash2, Loader2, ChevronLeft } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 function LiveContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const lectureId = searchParams.get('id');
   const { role } = useAuthStore();
@@ -31,15 +32,23 @@ function LiveContent() {
     if (confirm('질문을 삭제하시겠습니까?')) await deleteDoc(doc(db, 'questions', id));
   };
 
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/');
+    }
+  };
+
   if (!lectureId) return <div className="p-10 text-center">강좌 ID가 없습니다.</div>;
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-slate-900 text-white relative">
       {/* 뒤로가기 버튼 */}
       <button 
-        onClick={() => window.close()} 
+        onClick={handleBack} 
         className="fixed top-4 left-4 md:top-8 md:left-8 p-2 md:p-3 bg-white/5 hover:bg-white/10 rounded-xl md:rounded-2xl border border-white/10 text-white transition-all z-50 shadow-lg backdrop-blur-md"
-        title="닫기"
+        title="뒤로가기"
       >
         <ChevronLeft size={20} className="md:w-6 md:h-6" />
       </button>
