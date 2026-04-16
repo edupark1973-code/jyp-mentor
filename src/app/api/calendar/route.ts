@@ -9,10 +9,19 @@ export async function POST(req: Request) {
     // 🔴 터미널 확인용 로그 추가
     console.log('📅 캘린더 API 호출됨:', { date, time, menteeName, calendarId });
 
+    // 1. 환경 변수 체크
+    const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
+    const privateKey = process.env.GOOGLE_PRIVATE_KEY;
+
+    if (!clientEmail || !privateKey) {
+      console.error('❌ 환경 변수 누락: GOOGLE_CLIENT_EMAIL 또는 GOOGLE_PRIVATE_KEY가 설정되지 않았습니다.');
+      throw new Error('서버 환경 변수 설정이 누락되었습니다. (GOOGLE_CLIENT_EMAIL/PRIVATE_KEY)');
+    }
+
     const auth = new google.auth.GoogleAuth({
       credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        client_email: clientEmail,
+        private_key: privateKey.replace(/\\n/g, '\n'),
       },
       scopes: ['https://www.googleapis.com/auth/calendar.events'],
     });
