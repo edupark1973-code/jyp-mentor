@@ -108,17 +108,16 @@ function HomeContent() {
     return () => unsub();
   }, []);
 
-  // ✅ [수정] 내비게이션 안정화: replace를 사용해 히스토리 꼬임 방지
   useEffect(() => {
     if (lectureId) {
       getDoc(doc(db, 'lectures', lectureId)).then(s => {
         if (s.exists()) setCurrentLecture({ id: s.id, ...s.data() });
-        else router.replace('/');
+        else window.location.href = '/';
       });
     } else {
       setCurrentLecture(null);
     }
-  }, [lectureId, router]);
+  }, [lectureId]);
 
   const addLecture = async () => {
     if (!newLectureTitle.trim()) return;
@@ -136,9 +135,9 @@ function HomeContent() {
 
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-slate-900"><Loader2 className="animate-spin text-blue-600 w-12 h-12" /></div>;
 
-  // ✅ [수정] onBack 시 상태를 즉시 비우고 replace 실행
+  // ✅ [수정] 홈으로 가기 안정화: window.location.href 사용
   if (lectureId && currentLecture) {
-    return <Board lecture={currentLecture} role={role} onBack={() => { setCurrentLecture(null); router.replace('/'); }} />;
+    return <Board lecture={currentLecture} role={role} onBack={() => { window.location.href = '/'; }} />;
   }
 
   const displayLectures = role === 'admin' && user && viewMode === 'workspace'
@@ -251,6 +250,7 @@ function Board({ lecture, role, onBack }: any) {
       const fetchedCards = s.docs.map(d => ({ id: d.id, ...d.data() }));
       const sortedCards = fetchedCards.sort((a: any, b: any) => {
         if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+        // ✅ [수정] 정렬 로직 안정성: order가 같으면 createdAt 순으로 정렬
         if ((a.order || 0) !== (b.order || 0)) return (a.order || 0) - (b.order || 0);
         return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
       });
@@ -303,7 +303,7 @@ function Board({ lecture, role, onBack }: any) {
         </div>
       )}
 
-      <main className="flex-1 overflow-x-auto p-8 flex gap-8 items-start custom-scrollbar">
+      <main className="flex-1 overflow-x-auto p-8 flex gap-8 items-start custom-scrollbar text-slate-900">
         {sections.map(section => (
           <Section key={section.id} section={section} lecture={lecture} cards={cards.filter(c => c.sectionId === section.id)} role={role} onPreview={setPreviewMedia} />
         ))}
@@ -374,10 +374,10 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
     setTitle(''); setContent(''); setLinkUrl(''); setFileData(null); setIsAdding(false); setShowLinkInput(false);
   };
 
-  // ✅ [수정] 카드 이동 로직 완벽 보강 (ID 기반 완벽 타겟팅)
+  // ✅ [수정] 카드 이동 로직 완벽 보강 (ID 기반 + 동일 순서 대응)
   async function handleMoveCard(cardId: string, direction: 'up' | 'down') {
     if (role !== 'admin') return;
-    const currentIndex = cards.findIndex(c => c.id === cardId);
+    const currentIndex = cards.findIndex((c: any) => c.id === cardId);
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     if (targetIndex < 0 || targetIndex >= cards.length) return;
 
@@ -389,8 +389,9 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
     }
 
     const batch = writeBatch(db);
-    const fromOrder = fromCard.order ?? currentIndex;
-    const toOrder = toCard.order ?? targetIndex;
+    // order가 같거나 없을 경우 인덱스를 활용해 강제로 교체
+    const fromOrder = fromCard.order !== undefined ? fromCard.order : currentIndex;
+    const toOrder = toCard.order !== undefined ? toCard.order : targetIndex;
 
     if (fromOrder === toOrder) {
       batch.update(doc(db, 'cards', fromCard.id), { order: targetIndex });
@@ -471,7 +472,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{card.instructor}</span>
            {card.isPinned && <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Pinned</span>}
          </div>
-         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+         <div className="flex items-center gap-1">
            {role === 'admin' && (
              <div className="flex items-center gap-1 mr-2 border-r pr-2 border-slate-100">
                <button onClick={togglePin} className={`p-1.5 rounded-lg transition-all ${card.isPinned ? 'text-blue-500 bg-blue-50' : 'text-slate-300'}`} title="고정"><Pin size={14}/></button>

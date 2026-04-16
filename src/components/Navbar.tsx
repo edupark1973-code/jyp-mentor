@@ -55,12 +55,20 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 md:px-6">
         <div className="flex justify-between items-center h-16 md:h-20">
           <div className="flex items-center gap-4 md:gap-8">
-            <Link href="/" className="text-xl md:text-2xl font-black text-blue-600 italic tracking-tighter">
+            <button 
+              onClick={() => window.location.href = '/'} 
+              className="text-xl md:text-2xl font-black text-blue-600 italic tracking-tighter"
+            >
               EduReport
-            </Link>
+            </button>
             
             <div className="hidden md:flex items-center gap-6 text-sm font-bold text-slate-600">
-              <Link href="/" className={`${isActive('/') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>홈</Link>
+              <button 
+                onClick={() => window.location.href = '/'} 
+                className={`${isActive('/') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}
+              >
+                홈
+              </button>
               <Link href="/mentoring" className={`${isActive('/mentoring') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>멘토링 예약</Link>
             </div>
           </div>
