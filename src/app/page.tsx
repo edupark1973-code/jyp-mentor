@@ -458,12 +458,21 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
     if (role !== 'admin') return;
     const fromCard = cards[fromIndex];
     const toCard = cards[toIndex];
+    
+    // 기존 order가 없으면 현재 index를 기본값으로 사용
+    const fromOrder = fromCard.order !== undefined ? fromCard.order : fromIndex;
+    const toOrder = toCard.order !== undefined ? toCard.order : toIndex;
+    
     const batch = writeBatch(db);
     
-    // Swap order values
-    const tempOrder = fromCard.order || 0;
-    batch.update(doc(db, 'cards', fromCard.id), { order: toCard.order || 0 });
-    batch.update(doc(db, 'cards', toCard.id), { order: tempOrder });
+    // 만약 두 카드의 order가 같다면 index를 사용하여 강제로 교체
+    if (fromOrder === toOrder) {
+      batch.update(doc(db, 'cards', fromCard.id), { order: toIndex });
+      batch.update(doc(db, 'cards', toCard.id), { order: fromIndex });
+    } else {
+      batch.update(doc(db, 'cards', fromCard.id), { order: toOrder });
+      batch.update(doc(db, 'cards', toCard.id), { order: fromOrder });
+    }
     
     await batch.commit();
   }
