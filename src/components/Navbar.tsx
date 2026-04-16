@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/useAuthStore';
-import { signInWithPopup, GoogleAuthProvider, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, GoogleAuthProvider, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { X, Lock, Mail } from 'lucide-react';
 
@@ -14,14 +14,23 @@ export default function Navbar() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // 1. 구글 로그인 (계정 선택 창 강제 호출)
+  // 1. 구글 로그인 (모바일/데스크톱 분기 처리)
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+    
     try {
-      await signInWithPopup(auth, provider);
+      // 모바일 환경 체크 (User Agent 활용)
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
     } catch (error) {
       console.error('Google Login Error:', error);
+      alert('로그인 중 오류가 발생했습니다. 크롬이나 사파리 브라우저에서 시도해주세요.');
     }
   };
 
