@@ -77,6 +77,7 @@ export default function Navbar() {
             {role === 'admin' && (
               <div className="hidden md:flex items-center gap-4 border-l pl-6 border-slate-200">
                 <Link href="/admin/mentoring" className={`${isActive('/admin/mentoring') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'} transition-colors font-bold text-sm`}>멘토링 관리</Link>
+                <Link href="/admin/users" className={`${isActive('/admin/users') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'} transition-colors font-bold text-sm`}>사용자 관리</Link>
               </div>
             )}
 

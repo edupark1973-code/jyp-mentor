@@ -166,51 +166,50 @@ function HomeContent() {
     : lectures.filter(lecture => lecture.isPublic !== false); 
 
   return (
-    <div className="min-h-screen bg-slate-900 p-8 text-white font-sans">
+    <div className="min-h-screen bg-slate-900 p-4 md:p-8 text-white font-sans">
       <div className="max-w-6xl mx-auto">
-        <header className="flex justify-between items-center mb-8">
-          <div className="flex items-center gap-5">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white shadow-2xl shadow-blue-500/20"><BookOpen size={32} /></div>
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+          <div className="flex items-center gap-4 md:gap-5">
+            <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl md:rounded-[1.5rem] flex items-center justify-center text-white shadow-2xl shadow-blue-500/20"><BookOpen size={24} className="md:w-8 md:h-8" /></div>
             <div>
-              <h1 className="text-4xl font-black tracking-tight text-white italic">EduReport</h1>
-              <p className="text-slate-500 text-xs font-black uppercase tracking-[0.3em] mt-1">{role === 'admin' && user && viewMode === 'workspace' ? `${user.displayName || '강사'}'s Workspace` : 'Public Courses'}</p>
+              <h1 className="text-2xl md:text-4xl font-black tracking-tight text-white italic">EduReport</h1>
+              <p className="text-slate-500 text-[10px] md:text-xs font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mt-1">{role === 'admin' && user && viewMode === 'workspace' ? `${user.displayName || '강사'}'s Workspace` : 'Public Courses'}</p>
             </div>
           </div>
-          {/* ⭐ 설정 버튼 추가됨 */}
           {role === 'admin' && (
-            <div className="flex items-center gap-3">
-              <button onClick={() => setIsProfileSettingsOpen(true)} className="px-6 py-4 bg-slate-800 text-white rounded-[1.25rem] font-black flex items-center gap-2 hover:bg-slate-700 transition-all active:scale-95">
-                <Settings size={20} /> 설정
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <button onClick={() => setIsProfileSettingsOpen(true)} className="flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 bg-slate-800 text-white rounded-xl md:rounded-[1.25rem] font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-700 transition-all active:scale-95">
+                <Settings size={18} /> 설정
               </button>
-              <button onClick={() => setIsAddingLecture(true)} className="px-8 py-4 bg-blue-600 text-white rounded-[1.25rem] font-black flex items-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all active:scale-95">
-                <Plus size={20} /> 새 강좌 생성
+              <button onClick={() => setIsAddingLecture(true)} className="flex-1 md:flex-none px-4 md:px-8 py-3 md:py-4 bg-blue-600 text-white rounded-xl md:rounded-[1.25rem] font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all active:scale-95">
+                <Plus size={18} /> 새 강좌
               </button>
             </div>
           )}
         </header>
 
         {role === 'admin' && user && (
-          <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-10 w-fit backdrop-blur-sm">
-            <button onClick={() => setViewMode('workspace')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${viewMode === 'workspace' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><LayoutGrid size={16} /> 내 작업실</button>
-            <button onClick={() => setViewMode('public')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${viewMode === 'public' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400 hover:text-white'}`}><Globe size={16} /> 공개 쇼윈도 구경하기</button>
+          <div className="flex bg-white/5 p-1 rounded-xl md:rounded-2xl border border-white/10 mb-8 md:mb-10 w-full md:w-fit backdrop-blur-sm">
+            <button onClick={() => setViewMode('workspace')} className={`flex-1 md:flex-none px-4 md:px-6 py-2 md:py-2.5 rounded-lg md:rounded-xl font-black text-xs md:text-sm transition-all flex items-center justify-center gap-2 ${viewMode === 'workspace' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><LayoutGrid size={14} /> 내 작업실</button>
+            <button onClick={() => setViewMode('public')} className={`flex-1 md:flex-none px-4 md:px-6 py-2 md:py-2.5 rounded-lg md:rounded-xl font-black text-xs md:text-sm transition-all flex items-center justify-center gap-2 ${viewMode === 'public' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400 hover:text-white'}`}><Globe size={14} /> 공개 쇼윈도</button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
           {displayLectures.map((lecture) => (
-            <div key={lecture.id} onClick={() => router.push(`/?id=${lecture.id}`)} className="bg-white/5 p-10 rounded-[3.5rem] border border-white/10 shadow-sm hover:shadow-2xl hover:border-blue-500/50 hover:-translate-y-2 transition-all cursor-pointer group relative overflow-hidden backdrop-blur-sm flex flex-col h-[320px]">
+            <div key={lecture.id} onClick={() => router.push(`/?id=${lecture.id}`)} className="bg-white/5 p-6 md:p-10 rounded-[2rem] md:rounded-[3.5rem] border border-white/10 shadow-sm hover:shadow-2xl hover:border-blue-500/50 hover:-translate-y-2 transition-all cursor-pointer group relative overflow-hidden backdrop-blur-sm flex flex-col h-[280px] md:h-[320px]">
               {role === 'admin' && lecture.instructorUid === user?.uid && (
-                <button onClick={(e) => { e.stopPropagation(); if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'lectures', lecture.id)); }} className="absolute top-8 right-8 p-2 text-slate-600 hover:text-red-500 rounded-xl transition-colors z-10"><Trash2 size={20} /></button>
+                <button onClick={(e) => { e.stopPropagation(); if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'lectures', lecture.id)); }} className="absolute top-6 md:top-8 right-6 md:right-8 p-2 text-slate-600 hover:text-red-500 rounded-xl transition-colors z-10"><Trash2 size={18} /></button>
               )}
-              <div className="flex items-center justify-between mb-8">
-                <div className="w-16 h-16 bg-white/5 rounded-[1.5rem] flex items-center justify-center text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner border border-white/5"><LayoutGrid size={32} /></div>
-                {role === 'admin' && <div className={`px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-1.5 uppercase tracking-widest ${lecture.isPublic !== false ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{lecture.isPublic !== false ? <><Globe size={12}/> Public</> : <><Lock size={12}/> Private</>}</div>}
+              <div className="flex items-center justify-between mb-6 md:mb-8">
+                <div className="w-12 h-12 md:w-16 md:h-16 bg-white/5 rounded-xl md:rounded-[1.5rem] flex items-center justify-center text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner border border-white/5"><LayoutGrid size={24} className="md:w-8 md:h-8" /></div>
+                {role === 'admin' && <div className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[8px] md:text-[10px] font-black flex items-center gap-1 md:gap-1.5 uppercase tracking-widest ${lecture.isPublic !== false ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{lecture.isPublic !== false ? <><Globe size={10} className="md:w-3 md:h-3"/> Public</> : <><Lock size={10} className="md:w-3 md:h-3"/> Private</>}</div>}
               </div>
-              <h3 className="text-3xl font-black mb-4 leading-tight group-hover:text-white transition-colors line-clamp-2 flex-1">{lecture.title}</h3>
-              {viewMode === 'public' && <div className="text-slate-400 font-bold text-sm mb-4">👨‍🏫 {lecture.instructor}</div>}
-              <div className="flex items-center justify-between pt-6 border-t border-white/5 mt-auto">
-                 <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-widest"><Calendar size={14}/> {lecture.createdAt?.toDate().toLocaleDateString()}</div>
-                 <div className="text-blue-500 font-black text-[10px] flex items-center gap-1.5 uppercase tracking-[0.2em] group-hover:text-blue-400 transition-colors">Enter Board <ArrowRight size={14}/></div>
+              <h3 className="text-xl md:text-3xl font-black mb-3 md:mb-4 leading-tight group-hover:text-white transition-colors line-clamp-2 flex-1">{lecture.title}</h3>
+              {viewMode === 'public' && <div className="text-slate-400 font-bold text-[12px] md:text-sm mb-3 md:mb-4">👨‍🏫 {lecture.instructor}</div>}
+              <div className="flex items-center justify-between pt-4 md:pt-6 border-t border-white/5 mt-auto">
+                 <div className="flex items-center gap-1.5 md:gap-2 text-slate-500 text-[8px] md:text-[10px] font-black uppercase tracking-widest"><Calendar size={12} className="md:w-3.5 md:h-3.5"/> {lecture.createdAt?.toDate().toLocaleDateString()}</div>
+                 <div className="text-blue-500 font-black text-[8px] md:text-[10px] flex items-center gap-1 md:gap-1.5 uppercase tracking-[0.1em] md:tracking-[0.2em] group-hover:text-blue-400 transition-colors">Enter Board <ArrowRight size={12} className="md:w-3.5 md:h-3.5"/></div>
               </div>
             </div>
           ))}
@@ -302,6 +301,7 @@ function HomeContent() {
 function Board({ lecture, role, onBack }: any) {
   const [sections, setSections] = useState<any[]>([]);
   const [cards, setCards] = useState<any[]>([]);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [previewMedia, setPreviewMedia] = useState<{url: string, type: string} | null>(null);
@@ -311,7 +311,13 @@ function Board({ lecture, role, onBack }: any) {
 
   useEffect(() => {
     const sq = query(collection(db, 'sections'), where('lectureId', '==', lecture.id));
-    const unsubS = onSnapshot(sq, (s) => setSections(s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))));
+    const unsubS = onSnapshot(sq, (s) => {
+      const fetchedSections = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      setSections(fetchedSections);
+      if (fetchedSections.length > 0 && !activeSectionId) {
+        setActiveSectionId(fetchedSections[0].id);
+      }
+    });
     const cq = query(collection(db, 'cards'), where('lectureId', '==', lecture.id));
     const unsubC = onSnapshot(cq, (s) => {
       const fetchedCards = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -322,12 +328,13 @@ function Board({ lecture, role, onBack }: any) {
       setCards(sortedCards);
     });
     return () => { unsubS(); unsubC(); };
-  }, [lecture.id]);
+  }, [lecture.id, activeSectionId]);
 
   const addSection = async () => {
     if (!newSectionTitle.trim()) return;
-    await addDoc(collection(db, 'sections'), { lectureId: lecture.id, title: newSectionTitle, createdAt: serverTimestamp() });
+    const docRef = await addDoc(collection(db, 'sections'), { lectureId: lecture.id, title: newSectionTitle, createdAt: serverTimestamp() });
     setNewSectionTitle(''); setIsAddingSection(false);
+    setActiveSectionId(docRef.id);
   };
 
   const updateLectureSettings = async () => {
@@ -337,27 +344,42 @@ function Board({ lecture, role, onBack }: any) {
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 overflow-hidden text-slate-200">
-      <header className="p-6 border-b border-white/10 flex justify-between items-center bg-slate-900/50 backdrop-blur-md z-10">
-        <div className="flex items-center gap-6">
-          <button onClick={onBack} className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-white transition-all"><ChevronLeft /></button>
-          <div>
-            <h1 className="text-2xl font-black text-white flex items-center gap-3 tracking-tight"><div className="w-2 h-6 bg-pink-500 rounded-full"></div> {lecture.title}</h1>
-            <p className="text-slate-400 text-[10px] font-black uppercase mt-1 tracking-widest">{lecture.instructor} • BOARD</p>
+      <header className="p-4 md:p-6 border-b border-white/10 flex flex-col gap-4 bg-slate-900/50 backdrop-blur-md z-10">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3 md:gap-6">
+            <button onClick={onBack} className="p-2 md:p-3 bg-white/5 hover:bg-white/10 rounded-xl md:rounded-2xl border border-white/10 text-white transition-all"><ChevronLeft size={20} /></button>
+            <div>
+              <h1 className="text-lg md:text-2xl font-black text-white flex items-center gap-2 md:gap-3 tracking-tight"><div className="w-1.5 h-5 md:w-2 md:h-6 bg-pink-500 rounded-full"></div> {lecture.title}</h1>
+              <p className="text-slate-400 text-[8px] md:text-[10px] font-black uppercase mt-0.5 md:mt-1 tracking-widest">{lecture.instructor} • BOARD</p>
+            </div>
           </div>
+          {role === 'admin' && <button onClick={() => setIsSettingsOpen(true)} className="p-2 md:px-5 md:py-2.5 bg-slate-800 text-white rounded-xl md:rounded-2xl font-black text-sm hover:bg-slate-700 transition-all"><Settings size={20} className="md:hidden" /><span className="hidden md:inline">강좌 설정</span></button>}
         </div>
         
-        <div className="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-1">
-          {role === 'admin' && <button onClick={() => setIsSettingsOpen(true)} className="px-5 py-2.5 bg-slate-800 text-white rounded-2xl font-black text-sm hover:bg-slate-700 transition-all">강좌 설정</button>}
-          <button onClick={() => { const link = `${window.location.origin}/?id=${lecture.id}`; navigator.clipboard.writeText(link); alert('수강생 초대 링크가 복사되었습니다!'); }} className="px-5 py-2.5 bg-slate-700 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"><LinkIcon size={18} /> 초대 링크 복사</button>
-          <button onClick={() => window.open(`/lecture/live?id=${lecture.id}`, '_blank')} className="px-5 py-2.5 bg-indigo-600 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-indigo-700 active:scale-95 whitespace-nowrap"><Maximize2 size={18} /> 라이브 모드</button>
+        <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0">
+          <button onClick={() => { const link = `${window.location.origin}/?id=${lecture.id}`; navigator.clipboard.writeText(link); alert('복사되었습니다!'); }} className="px-4 py-2 md:px-5 md:py-2.5 bg-slate-700 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"><LinkIcon size={14} /> <span className="hidden md:inline">초대 링크</span> 복사</button>
+          <button onClick={() => window.open(`/lecture/live?id=${lecture.id}`, '_blank')} className="px-4 py-2 md:px-5 md:py-2.5 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-indigo-700 active:scale-95 whitespace-nowrap"><Maximize2 size={14} /> 라이브</button>
           {role === 'admin' && (
             <>
-              <button onClick={() => window.open(`/poll/manager?id=${lecture.id}`, '_blank')} className="px-5 py-2.5 bg-purple-600 text-white rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg hover:bg-purple-700 active:scale-95 whitespace-nowrap"><BarChart3 size={18} /> 투표 관리</button>
-              <button onClick={() => setIsAddingSection(true)} className="px-5 py-2.5 bg-pink-500 text-white rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg hover:bg-pink-600 active:scale-95 whitespace-nowrap"><Plus size={18} /> 섹션 추가</button>
+              <button onClick={() => window.open(`/poll/manager?id=${lecture.id}`, '_blank')} className="px-4 py-2 md:px-5 md:py-2.5 bg-purple-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 shadow-lg hover:bg-purple-700 active:scale-95 whitespace-nowrap"><BarChart3 size={14} /> 투표</button>
+              <button onClick={() => setIsAddingSection(true)} className="px-4 py-2 md:px-5 md:py-2.5 bg-pink-500 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 shadow-lg hover:bg-pink-600 active:scale-95 whitespace-nowrap"><Plus size={14} /> 섹션 추가</button>
             </>
           )}
         </div>
       </header>
+
+      {/* 섹션 탭 (모바일 전용) */}
+      <div className="md:hidden flex bg-slate-900 border-b border-white/5 overflow-x-auto custom-scrollbar px-4 pt-4 gap-2">
+        {sections.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setActiveSectionId(s.id)}
+            className={`px-4 py-2 rounded-t-xl text-xs font-black transition-all whitespace-nowrap ${activeSectionId === s.id ? 'bg-white/10 text-pink-500 border-b-2 border-pink-500' : 'text-slate-500'}`}
+          >
+            {s.title}
+          </button>
+        ))}
+      </div>
 
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-black/60 flex items-center justify-center p-6" onClick={() => setIsSettingsOpen(false)}>
@@ -372,12 +394,15 @@ function Board({ lecture, role, onBack }: any) {
         </div>
       )}
 
-      <main className="flex-1 overflow-x-auto p-8 flex gap-8 items-start custom-scrollbar">
+      <main className="flex-1 overflow-x-auto md:p-8 flex md:gap-8 items-start custom-scrollbar">
+        {/* 데스크톱: 가로 나열 / 모바일: 선택된 섹션만 노출 */}
         {sections.map(section => (
-          <Section key={section.id} section={section} lecture={lecture} cards={cards.filter(c => c.sectionId === section.id)} role={role} onPreview={setPreviewMedia} />
+          <div key={section.id} className={`${activeSectionId === section.id ? 'block w-full' : 'hidden'} md:block md:w-80 md:flex-shrink-0`}>
+            <Section section={section} lecture={lecture} cards={cards.filter(c => c.sectionId === section.id)} role={role} onPreview={setPreviewMedia} />
+          </div>
         ))}
         {isAddingSection && (
-          <div className="w-80 flex-shrink-0 bg-white/10 rounded-[2rem] p-5 border border-white/10 backdrop-blur-xl animate-in fade-in">
+          <div className="w-full md:w-80 flex-shrink-0 bg-white/10 rounded-3xl md:rounded-[2rem] p-5 border border-white/10 backdrop-blur-xl animate-in fade-in m-4 md:m-0">
              <input autoFocus value={newSectionTitle} onChange={e => setNewSectionTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSection()} placeholder="섹션 제목 입력..." className="w-full bg-white/10 border border-white/10 rounded-2xl px-5 py-3 text-white font-bold outline-none mb-4 focus:border-pink-500 transition-all" />
              <div className="flex gap-3">
                <button onClick={addSection} className="flex-1 bg-pink-500 text-white py-3 rounded-xl font-black text-sm shadow-lg active:scale-95 transition-all hover:bg-pink-600">생성</button>
@@ -386,6 +411,8 @@ function Board({ lecture, role, onBack }: any) {
           </div>
         )}
       </main>
+
+      {/* PDF 및 이미지 모달 뷰어 (중략) */}
 
       {/* PDF 및 이미지 모달 뷰어 */}
       {previewMedia && (
