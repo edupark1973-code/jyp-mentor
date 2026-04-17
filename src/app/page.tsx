@@ -6,7 +6,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverT
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock, Pin, ChevronUp, ChevronDown, Pencil } from 'lucide-react';
+import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock, Pin, ChevronUp, ChevronDown, Pencil, Settings } from 'lucide-react';
 
 // --- 유틸리티: 이미지 압축 (에러 방어 로직 추가) ---
 const compressImage = (file: File): Promise<Blob | File> => {
@@ -94,6 +94,12 @@ function HomeContent() {
   const [allowStudentPosts, setAllowStudentPosts] = useState(false);
   const [viewMode, setViewMode] = useState<'workspace' | 'public'>('workspace');
 
+  // ⭐ 추가된 상태(State) - 설정 모달 및 디스코드 주소
+  const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [isSavingWebhook, setIsSavingWebhook] = useState(false);
+  const [isWebhookSaved, setIsWebhookSaved] = useState(false);
+
   useEffect(() => {
     const q = query(collection(db, 'lectures'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (s) => setLectures(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -111,6 +117,17 @@ function HomeContent() {
     }
   }, [lectureId, router]);
 
+  // ⭐ 팝업 열 때 기존에 저장된 디스코드 주소 불러오기
+  useEffect(() => {
+    if (isProfileSettingsOpen && user?.uid) {
+      getDoc(doc(db, 'users', user.uid)).then(docSnap => {
+        if (docSnap.exists() && docSnap.data().discordWebhookUrl) {
+          setWebhookUrl(docSnap.data().discordWebhookUrl);
+        }
+      });
+    }
+  }, [isProfileSettingsOpen, user]);
+
   const addLecture = async () => {
     if (!newLectureTitle.trim()) return;
     await addDoc(collection(db, 'lectures'), {
@@ -119,6 +136,23 @@ function HomeContent() {
       isPublic, allowStudentPosts, createdAt: serverTimestamp(),
     });
     setNewLectureTitle(''); setNewLectureDesc(''); setIsAddingLecture(false); setIsPublic(true); setAllowStudentPosts(false);
+  };
+
+  // ⭐ 디스코드 주소 DB에 저장하는 함수
+  const handleSaveWebhook = async () => {
+    if (!user?.uid) return;
+    setIsSavingWebhook(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        discordWebhookUrl: webhookUrl.trim() || null
+      });
+      setIsWebhookSaved(true);
+      setTimeout(() => setIsWebhookSaved(false), 2000);
+    } catch (error) {
+      alert('저장에 실패했습니다.');
+    } finally {
+      setIsSavingWebhook(false);
+    }
   };
 
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-slate-900"><Loader2 className="animate-spin text-blue-600 w-12 h-12" /></div>;
@@ -142,7 +176,17 @@ function HomeContent() {
               <p className="text-slate-500 text-xs font-black uppercase tracking-[0.3em] mt-1">{role === 'admin' && user && viewMode === 'workspace' ? `${user.displayName || '강사'}'s Workspace` : 'Public Courses'}</p>
             </div>
           </div>
-          {role === 'admin' && <button onClick={() => setIsAddingLecture(true)} className="px-8 py-4 bg-blue-600 text-white rounded-[1.25rem] font-black flex items-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all active:scale-95"><Plus size={20} /> 새 강좌 생성</button>}
+          {/* ⭐ 설정 버튼 추가됨 */}
+          {role === 'admin' && (
+            <div className="flex items-center gap-3">
+              <button onClick={() => setIsProfileSettingsOpen(true)} className="px-6 py-4 bg-slate-800 text-white rounded-[1.25rem] font-black flex items-center gap-2 hover:bg-slate-700 transition-all active:scale-95">
+                <Settings size={20} /> 설정
+              </button>
+              <button onClick={() => setIsAddingLecture(true)} className="px-8 py-4 bg-blue-600 text-white rounded-[1.25rem] font-black flex items-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all active:scale-95">
+                <Plus size={20} /> 새 강좌 생성
+              </button>
+            </div>
+          )}
         </header>
 
         {role === 'admin' && user && (
@@ -204,6 +248,48 @@ function HomeContent() {
                 <button onClick={addLecture} className="flex-1 bg-blue-600 text-white py-5 rounded-[1.5rem] font-black shadow-xl">생성하기</button>
                 <button onClick={() => setIsAddingLecture(false)} className="px-8 bg-slate-100 text-slate-500 py-5 rounded-[1.5rem] font-black">취소</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ⭐ 강사 프로필/알림 설정 모달 */}
+        {isProfileSettingsOpen && (
+          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setIsProfileSettingsOpen(false)}>
+            <div className="bg-white rounded-[3rem] p-12 w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+              <h2 className="text-3xl font-black mb-2 text-slate-900">강사 설정</h2>
+              <p className="text-sm text-slate-500 font-bold mb-8">멘토링 예약 신청 시 알림을 받을 방식을 설정합니다.</p>
+
+              <div className="space-y-6">
+                <div className="p-6 bg-slate-50 rounded-[1.5rem] border border-slate-100">
+                  <h3 className="font-black text-slate-900 flex items-center gap-2 mb-2">
+                    <MessageCircle size={18} className="text-indigo-500"/> 디스코드 실시간 알림
+                  </h3>
+                  <p className="text-xs text-slate-500 font-bold mb-4">
+                    본인의 디스코드 서버 웹훅 URL을 입력하시면 즉시 푸시 알림을 받습니다. (비워두시면 기본 이메일로 발송됩니다)
+                  </p>
+
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="https://discord.com/api/webhooks/..." 
+                      value={webhookUrl}
+                      onChange={(e) => setWebhookUrl(e.target.value)}
+                      className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-indigo-500 font-bold text-sm text-slate-700"
+                    />
+                    <button 
+                      onClick={handleSaveWebhook}
+                      disabled={isSavingWebhook}
+                      className="px-6 py-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 transition-all flex items-center gap-2"
+                    >
+                      {isSavingWebhook ? <Loader2 className="animate-spin" size={18} /> : isWebhookSaved ? <Check size={18} /> : '저장'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button onClick={() => setIsProfileSettingsOpen(false)} className="w-full mt-8 px-8 bg-slate-100 text-slate-600 hover:bg-slate-200 py-4 rounded-[1.5rem] font-black transition-colors">
+                닫기
+              </button>
             </div>
           </div>
         )}
@@ -335,7 +421,6 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
   const fileRef = useRef<HTMLInputElement>(null);
   const { user } = useAuthStore();
 
-  // ✅ [수정] 섹션 삭제 시 고아 카드 완벽 제거 로직
   const handleDeleteSection = async () => {
     if (confirm('섹션을 삭제하시겠습니까? (내부 카드도 모두 삭제됩니다)')) {
       const batch = writeBatch(db);
@@ -378,7 +463,7 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
 
   async function handleMoveCard(cardId: string, direction: 'up' | 'down') {
     if (role !== 'admin') return;
-const currentIndex = cards.findIndex((c: any) => c.id === cardId);
+    const currentIndex = cards.findIndex((c: any) => c.id === cardId);
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     if (targetIndex < 0 || targetIndex >= cards.length) return;
 
@@ -446,7 +531,6 @@ const currentIndex = cards.findIndex((c: any) => c.id === cardId);
             <div className="flex justify-between items-center pt-4 border-t">
               <div className="flex gap-1">
                 <button onClick={() => fileRef.current?.click()} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors" title="콘텐츠 첨부 (최대 10MB)"><Paperclip size={20} /></button>
-                {/* ✅ [수정] 파일 재업로드 버그 방지 (onClick 추가) */}
                 <input ref={fileRef} type="file" className="hidden" onChange={handleFileUpload} onClick={(e: any) => e.target.value = ''} />
                 <button onClick={() => setShowLinkInput(!showLinkInput)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors" title="링크 추가"><LinkIcon size={20} /></button>
               </div>
