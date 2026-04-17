@@ -110,7 +110,10 @@ export default function Navbar() {
             <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>홈</Link>
             <Link href="/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>멘토링 예약</Link>
             {role === 'admin' && (
-              <Link href="/admin/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/admin/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all border-t border-slate-50 pt-4`}>멘토링 관리</Link>
+              <>
+                <Link href="/admin/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/admin/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all border-t border-slate-50 pt-4`}>멘토링 관리</Link>
+                <Link href="/admin/users" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/admin/users') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>사용자 관리</Link>
+              </>
             )}
           </div>
           <div className="pt-4 border-t border-slate-100 flex flex-col gap-3">
