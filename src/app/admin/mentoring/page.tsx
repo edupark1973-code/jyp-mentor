@@ -6,6 +6,8 @@ import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Plus, Trash2, Calendar, Clock, Loader2, CheckCircle, XCircle, Layers, FileText, ExternalLink, User, Mail, Ban, CheckCircle2, MessageSquareText, X, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+// 🌟 [추가] 수강생 승인 알림 함수 임포트
+import { sendMenteeApprovalNotification } from '@/lib/notifications';
 
 interface Slot {
   id: string;
@@ -20,6 +22,7 @@ interface Slot {
 interface Booking {
   id: string;
   slotId: string;
+  menteeId: string; // 🌟 인터페이스에 menteeId 추가
   menteeName: string;
   menteeEmail: string;
   businessPlanUrl?: string;
@@ -27,6 +30,7 @@ interface Booking {
   requestText?: string;
   status: string;
   cancelReason?: string;
+  lectureTitle?: string;
 }
 
 export default function AdminMentoringPage() {
@@ -46,7 +50,6 @@ export default function AdminMentoringPage() {
   const [cancelingSlotId, setCancelingSlotId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
-  // 👉 [추가됨] 관리자 달력 필터링을 위한 상태
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
 
@@ -122,7 +125,7 @@ export default function AdminMentoringPage() {
 
       await Promise.all(promises);
       alert(`${promises.length}개의 슬롯이 생성되었습니다.`);
-      setSelectedDate(newDate); // 생성 후 해당 날짜로 이동
+      setSelectedDate(newDate);
     } catch (error) {
       console.error('Error adding slots:', error);
       alert('슬롯 생성 중 오류가 발생했습니다.');
@@ -136,8 +139,9 @@ export default function AdminMentoringPage() {
     await deleteDoc(doc(db, 'mentoring_slots', id));
   };
 
+  // 🌟 [핵심 수정] 예약 수락 로직: 캘린더 등록 + 멘티 메일 발송
   const handleAcceptBooking = async (bookingId: string) => {
-    if (!confirm('해당 예약을 수락하시겠습니까? (수락 시 구글 캘린더에 자동 등록됩니다)')) return;
+    if (!confirm('해당 예약을 수락하시겠습니까? (수락 시 구글 캘린더 등록 및 멘티에게 알림 메일이 발송됩니다)')) return;
 
     try {
       await updateDoc(doc(db, 'bookings', bookingId), {
@@ -148,6 +152,7 @@ export default function AdminMentoringPage() {
       const slot = slots.find(s => s.id === booking?.slotId);
 
       if (booking && slot) {
+        // 1. 구글 캘린더 연동
         const response = await fetch('/api/calendar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -166,12 +171,21 @@ export default function AdminMentoringPage() {
           const errorData = await response.json();
           throw new Error(errorData.error || '구글 캘린더 API 연동에 실패했습니다.');
         }
+
+        // 🌟 2. 멘티(수강생)에게 승인 알림 이메일 발송
+        if (booking.menteeId) {
+          await sendMenteeApprovalNotification(
+            booking.menteeId,
+            booking.lectureTitle || '멘토링 프로그램',
+            `${slot.date} ${slot.time}`
+          );
+        }
       }
 
-      alert('예약이 수락되었으며, 구글 캘린더에 정상적으로 등록되었습니다! 🎉');
+      alert('예약이 수락되었으며, 수강생에게 안내 메일이 발송되었습니다! 🎉');
     } catch (error: any) {
       console.error('Accept booking error:', error);
-      alert(`[캘린더 연동 실패] ${error.message}\nVS Code 터미널 창의 에러 로그를 확인해주세요!`);
+      alert(`[처리 실패] ${error.message}`);
     }
   };
 
@@ -226,7 +240,6 @@ export default function AdminMentoringPage() {
     });
   };
 
-  // 👉 [달력 로직]
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -241,7 +254,6 @@ export default function AdminMentoringPage() {
   const handlePrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
   const handleNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
 
-  // 현재 필터링된 슬롯
   const availableDates = Array.from(new Set(slots.map(s => s.date)));
   const filteredSlots = slots.filter(s => s.date === selectedDate);
 
@@ -265,9 +277,7 @@ export default function AdminMentoringPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Section: Creation Form & Calendar */}
         <div className="space-y-8 h-fit lg:sticky lg:top-24">
-          {/* Mini Calendar Filter */}
           <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
@@ -305,7 +315,6 @@ export default function AdminMentoringPage() {
             </div>
           </section>
 
-          {/* Bulk Slot Creation Form */}
           <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl">
             <h2 className="font-bold mb-6 flex items-center gap-2 text-blue-600">
               <Layers size={20} />
@@ -390,7 +399,6 @@ export default function AdminMentoringPage() {
           </section>
         </div>
 
-        {/* Right Section: Slot List */}
         <section className="lg:col-span-2">
           <h2 className="font-bold text-slate-800 mb-6 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -518,7 +526,6 @@ export default function AdminMentoringPage() {
         </section>
       </div>
 
-      {/* 취소 사유 입력 모달 */}
       {showCancelModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowCancelModal(false)}>
           <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-lg shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
