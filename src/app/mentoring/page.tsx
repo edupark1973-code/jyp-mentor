@@ -375,6 +375,7 @@ function MentoringContent() {
                   {isSubmitting ? <Loader2 className="animate-spin" size={24} /> : <CheckCircle size={24} />}
                   예약 신청 완료하기
                 </button>
+                 {!user && <p className="text-center mt-4 text-red-500 text-sm font-bold">로그인이 필요한 서비스입니다.</p>}
               </section>
             </div>
           )}
