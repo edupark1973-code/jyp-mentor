@@ -8,6 +8,9 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { Calendar as CalendarIcon, Clock, Upload, FileText, CheckCircle, Loader2, ChevronLeft, ChevronRight, MessageSquareText, AlertCircle, MapPin, User, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+// ⭐ 1. 2단계에서 만든 알림 전송 함수를 불러옵니다.
+import { sendMentoringNotification } from '@/lib/notifications';
+
 interface Slot {
   id: string;
   date: string;
@@ -87,11 +90,22 @@ function MentoringContent() {
         createdAt: serverTimestamp(),
       };
 
+      // DB에 예약 정보 저장
       await addDoc(collection(db, 'bookings'), bookingData);
       await updateDoc(doc(db, 'mentoring_slots', selectedSlot.id), {
         isBooked: true,
         menteeName: user.displayName,
       });
+
+      // ⭐ 2. DB 저장이 성공적으로 끝난 직후, 강사에게 알림을 발송합니다!
+      if (selectedSlot.instructorUid) {
+        await sendMentoringNotification(
+          selectedSlot.instructorUid,                          // 강사의 UID
+          user.displayName || '익명 수강생',                   // 신청한 수강생 이름
+          `${selectedSlot.date} ${selectedSlot.time}`,         // 예약한 날짜와 시간
+          `${selectedSlot.instructorName || '담당'} 멘토링`    // 알림에 표시될 강좌명
+        );
+      }
 
       alert('멘토링 예약이 완료되었습니다!');
       setSelectedSlot(null);

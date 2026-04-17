@@ -2,11 +2,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // 1. [수정] 사용자 규칙: 알림 발송을 위해 이메일 정보 읽기는 로그인한 사용자에게 허용
     match /users/{userId} {
-      allow read, write: if request.auth != null && (
+      // 읽기: 로그인한 사용자는 강사의 이메일을 알아야 알림을 보낼 수 있으므로 허용
+      allow read: if request.auth != null;
+      // 쓰기: 본인 또는 어드민만 가능 (기존 유지)
+      allow write: if request.auth != null && (
         request.auth.uid == userId || 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
       );
+    }
+    
+    // 2. [추가] 메일 발송 규칙: Trigger Email 익스텐션이 감시하는 컬렉션
+    match /mail/{mailId} {
+      // 수강생이 예약 시 이 컬렉션에 문서를 '생성'할 수 있어야 함
+      allow create: if request.auth != null;
+      // 보안을 위해 아무나 읽거나 수정하는 것은 금지
+      allow read, update, delete: if false;
     }
     
     match /sections/{sectionId} {
@@ -32,32 +44,53 @@ service cloud.firestore {
     
     match /independent_polls/{pollId} {
       allow read: if true;
-      allow write: if true; // 투표 업데이트 및 생성을 위해 우선 허용 (운영 시 admin 체크 필요)
+      allow write: if true; 
     }
     
-    // 👉 [수정됨] 멘토링 슬롯 규칙
     match /mentoring_slots/{slotId} {
       allow read: if true;
-      // 생성과 삭제는 관리자(강사)만 가능
       allow create, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      // 슬롯 업데이트(예약 상태 변경)는 로그인한 수강생도 가능하도록 분리하여 허용
       allow update: if request.auth != null; 
     }
     
-    // 👉 [수정됨] 예약(bookings) 규칙
     match /bookings/{bookingId} {
       allow create: if request.auth != null;
       allow read: if request.auth != null && (resource.data.menteeId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      
-      // 예약 승인/거절 등 업데이트는 관리자(강사)만 가능
       allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      
-      // 예약 삭제(취소)는 관리자이거나 '본인이 한 예약'일 때만 허용
       allow delete: if request.auth != null && (resource.data.menteeId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
     
     match /lectures/{id} { allow read, write: if true; }
     match /materials/{id} { allow read, write: if true; }
     match /questions/{id} { allow read, write: if true; }
+  }
+}
+
+// 멘티(수강생)에게 승인 알림을 보내는 함수
+export async function sendMenteeApprovalNotification(
+  menteeUid: string,
+  lectureTitle: string,
+  date: string
+) {
+  try {
+    // 1. 멘티 정보 가져오기
+    const menteeDoc = await getDoc(doc(db, 'users', menteeUid));
+    if (!menteeDoc.exists()) return;
+
+    const menteeEmail = menteeDoc.data().email;
+    if (!menteeEmail) return;
+
+    // 2. 이메일 발송용 'mail' 컬렉션에 문서 추가
+    await addDoc(collection(db, 'mail'), {
+      to: menteeEmail,
+      message: {
+        subject: `🎉 [EduReport] 멘토링 예약이 승인되었습니다!`,
+        text: `안녕하세요! 신청하신 [${lectureTitle}] 멘토링 예약이 강사님에 의해 승인되었습니다.\n\n🗓️ 일시: ${date}\n\n정해진 시간에 늦지 않게 참여해 주세요. 감사합니다!`,
+      },
+    });
+
+    console.log('멘티에게 승인 알림 메일 발송 완료!');
+  } catch (error) {
+    console.error('멘티 알림 발송 중 에러:', error);
   }
 }

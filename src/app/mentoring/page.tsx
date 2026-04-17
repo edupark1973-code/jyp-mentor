@@ -1,145 +1,229 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, doc, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { useState, useEffect } from 'react';
+import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, updateDoc, writeBatch, serverTimestamp, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Calendar as CalendarIcon, Clock, Upload, FileText, CheckCircle, Loader2, ChevronLeft, ChevronRight, MessageSquareText, AlertCircle, MapPin, User, ArrowRight } from 'lucide-react';
+import { Plus, Trash2, Calendar, Clock, Loader2, CheckCircle, XCircle, Layers, FileText, ExternalLink, User, Mail, Ban, CheckCircle2, MessageSquareText, X, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-
-// ⭐ 1. 2단계에서 만든 알림 전송 함수를 불러옵니다.
-import { sendMentoringNotification } from '@/lib/notifications';
+// 👉 [추가] 알림 함수 임포트
+import { sendMenteeApprovalNotification } from '@/lib/notifications';
 
 interface Slot {
   id: string;
   date: string;
   time: string;
   isBooked: boolean;
+  menteeName?: string;
   location?: string;
-  instructorUid?: string; 
-  instructorName?: string;
+  duration?: number;
+  lectureTitle?: string; // 강좌명 필드 대응
 }
 
-function MentoringContent() {
-  const router = useRouter();
-  const [slots, setSlots] = useState<Slot[]>([]);
-  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [requestText, setRequestText] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [myBookings, setMyBookings] = useState<any[]>([]);
-  
-  const [selectedInstructorUid, setSelectedInstructorUid] = useState<string | null>(null);
-  
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+interface Booking {
+  id: string;
+  slotId: string;
+  menteeId: string; // 멘티 UID 추가
+  menteeName: string;
+  menteeEmail: string;
+  businessPlanUrl?: string;
+  businessPlanName?: string;
+  requestText?: string;
+  status: string;
+  cancelReason?: string;
+  lectureTitle?: string;
+}
 
-  const { user, loading: authLoading } = useAuthStore();
+export default function AdminMentoringPage() {
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [newDate, setNewDate] = useState('');
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('18:00');
+  const [interval, setInterval] = useState(60); 
+  const [location, setLocation] = useState('온라인 (Zoom)'); 
+  const router = useRouter(); 
+  
+  const { role, user, loading: authLoading } = useAuthStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelingSlotId, setCancelingSlotId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
+
+  const timeOptions: string[] = [];
+  for (let i = 0; i < 24; i++) {
+    const hour = i.toString().padStart(2, '0');
+    timeOptions.push(`${hour}:00`);
+    timeOptions.push(`${hour}:30`);
+  }
 
   useEffect(() => {
-    const q = query(
+    if (role !== 'admin' || !user) return;
+
+    const qSlots = query(
       collection(db, 'mentoring_slots'), 
-      where('isBooked', '==', false), 
+      where('instructorUid', '==', user.uid),
       orderBy('date'), 
       orderBy('time')
     );
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubSlots = onSnapshot(qSlots, (snapshot) => {
       setSlots(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Slot[]);
     });
-    return () => unsubscribe();
-  }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'bookings'), where('menteeId', '==', user.uid), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setMyBookings(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    const qBookings = query(collection(db, 'bookings'));
+    const unsubBookings = onSnapshot(qBookings, (snapshot) => {
+      setBookings(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Booking[]);
     });
-    return () => unsubscribe();
-  }, [user]);
 
-  const handleBooking = async () => {
-    if (!user || !selectedSlot) return;
+    return () => {
+      unsubSlots();
+      unsubBookings();
+    };
+  }, [role, user]);
+
+  const handleBulkAddSlots = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDate || !startTime || !endTime || !location.trim()) {
+      alert('모든 정보를 입력해주세요.');
+      return;
+    }
+    
+    const start = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
+    const end = parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1]);
+
+    if (start >= end) {
+      alert('종료 시간은 시작 시간보다 늦어야 합니다.');
+      return;
+    }
+
     setIsSubmitting(true);
-
     try {
-      let fileUrl = null;
-      let fileName = null;
+      let current = start;
+      const promises = [];
 
-      if (file) {
-        const storageRef = ref(storage, `bookings/${user.uid}/${Date.now()}_${file.name}`);
-        const uploadResult = await uploadBytes(storageRef, file);
-        fileUrl = await getDownloadURL(uploadResult.ref);
-        fileName = file.name;
+      while (current + interval <= end) {
+        const h = Math.floor(current / 60).toString().padStart(2, '0');
+        const m = (current % 60).toString().padStart(2, '0');
+        const timeString = `${h}:${m}`;
+
+        promises.push(addDoc(collection(db, 'mentoring_slots'), {
+          date: newDate,
+          time: timeString,
+          location: location.trim(),
+          duration: interval,
+          isBooked: false,
+          instructorUid: user?.uid,
+          instructorName: user?.displayName || '공용 강사',
+          createdAt: new Date().toISOString()
+        }));
+
+        current += interval;
       }
 
-      const bookingData = {
-        menteeId: user.uid,
-        menteeName: user.displayName,
-        menteeEmail: user.email,
-        slotId: selectedSlot.id,
-        date: selectedSlot.date,
-        time: selectedSlot.time,
-        location: selectedSlot.location || '장소 미지정',
-        businessPlanUrl: fileUrl,
-        businessPlanName: fileName,
-        requestText: requestText.trim() || null,
-        status: 'pending',
-        instructorName: selectedSlot.instructorName || '멘토', 
-        createdAt: serverTimestamp(),
-      };
-
-      // DB에 예약 정보 저장
-      await addDoc(collection(db, 'bookings'), bookingData);
-      await updateDoc(doc(db, 'mentoring_slots', selectedSlot.id), {
-        isBooked: true,
-        menteeName: user.displayName,
-      });
-
-      // ⭐ 2. DB 저장이 성공적으로 끝난 직후, 강사에게 알림을 발송합니다!
-      if (selectedSlot.instructorUid) {
-        await sendMentoringNotification(
-          selectedSlot.instructorUid,                          // 강사의 UID
-          user.displayName || '익명 수강생',                   // 신청한 수강생 이름
-          `${selectedSlot.date} ${selectedSlot.time}`,         // 예약한 날짜와 시간
-          `${selectedSlot.instructorName || '담당'} 멘토링`    // 알림에 표시될 강좌명
-        );
-      }
-
-      alert('멘토링 예약이 완료되었습니다!');
-      setSelectedSlot(null);
-      setSelectedDate(null);
-      setFile(null);
-      setRequestText('');
+      await Promise.all(promises);
+      alert(`${promises.length}개의 슬롯이 생성되었습니다.`);
+      setSelectedDate(newDate);
     } catch (error) {
-      console.error('Booking error:', error);
-      alert('예약 처리 중 오류가 발생했습니다.');
+      console.error('Error adding slots:', error);
+      alert('슬롯 생성 중 오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleCancelBooking = async (bookingId: string, slotId: string) => {
-    if (!confirm('예약을 취소하시겠습니까?')) return;
+  const handleDeleteSlot = async (id: string) => {
+    if (!confirm('이 슬롯을 삭제하시겠습니까?')) return;
+    await deleteDoc(doc(db, 'mentoring_slots', id));
+  };
+
+  // 👉 [수정됨] 예약 수락 및 멘티 알림 로직
+  const handleAcceptBooking = async (bookingId: string) => {
+    if (!confirm('해당 예약을 수락하시겠습니까? (수락 시 구글 캘린더 등록 및 멘티 알림 메일이 발송됩니다)')) return;
+
     try {
-      await deleteDoc(doc(db, 'bookings', bookingId));
-      await updateDoc(doc(db, 'mentoring_slots', slotId), {
-        isBooked: false,
-        menteeName: null,
+      // 1. 상태 업데이트
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        status: 'accepted'
       });
-      alert('예약이 취소되었습니다.');
-    } catch (error) {
-      console.error('Cancel error:', error);
-      alert('취소 처리 중 오류가 발생했습니다.');
+
+      const booking = bookings.find(b => b.id === bookingId);
+      const slot = slots.find(s => s.id === booking?.slotId);
+
+      if (booking && slot) {
+        // 2. 구글 캘린더 연동
+        const response = await fetch('/api/calendar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: slot.date,
+            time: slot.time,
+            duration: slot.duration || 60,
+            menteeName: booking.menteeName,
+            location: slot.location,
+            requestText: booking.requestText,
+            calendarId: 'fd8dba786b6aeebdabda4191e5591b1580a66f5a1dcad94e288a7ca68ece2df2@group.calendar.google.com' 
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || '구글 캘린더 API 연동에 실패했습니다.');
+        }
+
+        // 🌟 3. [추가] 멘티에게 승인 이메일 알림 발송
+        if (booking.menteeId) {
+          await sendMenteeApprovalNotification(
+            booking.menteeId,
+            booking.lectureTitle || slot.lectureTitle || '멘토링 프로그램',
+            `${slot.date} ${slot.time}`
+          );
+        }
+      }
+
+      alert('예약이 수락되었으며, 캘린더 등록 및 멘티 안내 메일 발송이 완료되었습니다! 🎉');
+    } catch (error: any) {
+      console.error('Accept booking error:', error);
+      alert(`[처리 실패] ${error.message}`);
     }
   };
 
-  const handleDismissCanceled = async (bookingId: string) => {
+  const confirmCancelBooking = async () => {
+    if (!cancelingSlotId || !cancelReason.trim()) {
+      alert('취소 사유를 입력해주세요.');
+      return;
+    }
+
     try {
-      await deleteDoc(doc(db, 'bookings', bookingId));
+      const q = query(collection(db, 'bookings'), where('slotId', '==', cancelingSlotId));
+      const snapshot = await getDocs(q);
+      
+      const batch = writeBatch(db);
+      
+      snapshot.forEach((d) => {
+        batch.update(doc(db, 'bookings', d.id), {
+          status: 'canceled',
+          cancelReason: cancelReason.trim(),
+          canceledAt: serverTimestamp()
+        });
+      });
+
+      batch.update(doc(db, 'mentoring_slots', cancelingSlotId), {
+        isBooked: false,
+        menteeName: null
+      });
+
+      await batch.commit();
+      alert('예약이 성공적으로 거절/취소되었습니다.');
+      setShowCancelModal(false);
+      setCancelingSlotId(null);
+      setCancelReason('');
     } catch (error) {
-      console.error('Dismiss error:', error);
+      console.error('Cancel booking error:', error);
+      alert('예약 취소 중 오류가 발생했습니다.');
     }
   };
 
@@ -148,24 +232,16 @@ function MentoringContent() {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     return text.split(urlRegex).map((part, index) => {
       if (part.match(urlRegex)) {
-        return <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-all">{part}</a>;
+        return (
+          <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline break-all">
+            {part}
+          </a>
+        );
       }
       return part;
     });
   };
 
-  if (authLoading) return (
-    <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" size={40} /></div>
-  );
-
-  const uniqueInstructors = Array.from(new Set(slots.map(s => s.instructorUid))).map(uid => {
-    const slot = slots.find(s => s.instructorUid === uid);
-    const slotsCount = slots.filter(s => s.instructorUid === uid).length;
-    return { uid, name: slot?.instructorName || '알 수 없는 멘토', slotsCount };
-  }).filter(inst => inst.uid);
-
-  const instructorSlots = slots.filter(s => s.instructorUid === selectedInstructorUid);
-  
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -177,308 +253,319 @@ function MentoringContent() {
     calendarDays.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`);
   }
 
-  const availableDates = Array.from(new Set(instructorSlots.map(s => s.date)));
-  const availableTimesForSelectedDate = instructorSlots.filter(s => s.date === selectedDate);
-
   const handlePrevMonth = () => setCurrentMonth(new Date(year, month - 1, 1));
   const handleNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
 
+  const availableDates = Array.from(new Set(slots.map(s => s.date)));
+  const filteredSlots = slots.filter(s => s.date === selectedDate);
+
+  if (authLoading) return null;
+  if (role !== 'admin') {
+    setTimeout(() => router.push('/'), 1000);
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-50">
+        <p className="text-lg font-bold text-slate-500">권한이 없습니다. 메인 화면으로 이동합니다...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-6xl mx-auto p-6 md:p-12">
-      <header className="flex items-center gap-4 mb-12 relative">
-        <button 
-          onClick={() => {
-            if (selectedInstructorUid) {
-              setSelectedInstructorUid(null);
-              setSelectedSlot(null);
-              setSelectedDate(null);
-            } else {
-              router.push('/');
-            }
-          }} 
-          className="p-3 bg-white rounded-2xl shadow-sm hover:bg-slate-50 transition-all border border-slate-100 z-10"
-        >
-          <ChevronLeft size={24} className="text-slate-600" />
-        </button>
+    <div className="max-w-6xl mx-auto p-6 text-slate-900">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-black text-slate-900">
-            {selectedInstructorUid ? '1:1 멘토링 예약' : '멘토 선택'}
-          </h1>
-          <p className="text-slate-500 font-medium">
-            {selectedInstructorUid ? '전문가와 함께 사업 계획을 구체화하세요.' : '상담을 원하는 강사님을 선택해 주세요.'}
-          </p>
+          <h1 className="text-2xl font-bold">멘토링 가용 시간 관리</h1>
+          <p className="text-slate-500 text-sm">일괄 생성을 통해 여러 슬롯을 한 번에 등록하세요.</p>
         </div>
-      </header>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        <div className="lg:col-span-2 space-y-12">
-          
-          {!selectedInstructorUid && (
-            <section className="animate-in fade-in slide-in-from-bottom-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {uniqueInstructors.map(instructor => (
-                  <div 
-                    key={instructor.uid} 
-                    onClick={() => {
-                      setSelectedInstructorUid(instructor.uid as string);
-                      setSelectedDate(null);
-                      setSelectedSlot(null);
-                    }}
-                    className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group flex items-center justify-between"
-                  >
-                    <div className="flex items-center gap-5">
-                      <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                        <User size={32} />
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-black text-slate-900 group-hover:text-blue-600 transition-colors">{instructor.name} 멘토</h2>
-                        <p className="text-slate-400 font-bold text-sm mt-1">예약 가능 일정: <span className="text-blue-500">{instructor.slotsCount}</span>개</p>
-                      </div>
-                    </div>
-                    <ArrowRight className="text-slate-300 group-hover:text-blue-600 transition-colors" />
-                  </div>
-                ))}
-                
-                {uniqueInstructors.length === 0 && (
-                  <div className="col-span-full py-16 text-center text-slate-400 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 font-bold">
-                    현재 멘토링 가능한 멘토가 없습니다.
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {selectedInstructorUid && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-right-8">
-              
-              <section>
-                <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900">
-                  <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm">1</span>
-                  날짜 및 시간 선택
-                </h2>
-                
-                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col md:flex-row">
-                  
-                  <div className="p-8 md:w-1/2 md:border-r border-slate-100 bg-white">
-                    <div className="flex items-center justify-between mb-6">
-                      <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
-                      <h3 className="font-black text-lg text-slate-900">{year}년 {month + 1}월</h3>
-                      <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronRight size={20} className="text-slate-600"/></button>
-                    </div>
-                    
-                    <div className="grid grid-cols-7 gap-2 text-center text-xs font-black text-slate-400 mb-4">
-                      <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
-                    </div>
-                    
-                    <div className="grid grid-cols-7 gap-y-2 gap-x-1">
-                      {calendarDays.map((dateStr, i) => {
-                        if (!dateStr) return <div key={`empty-${i}`} className="p-2"></div>;
-                        
-                        const isAvailable = availableDates.includes(dateStr);
-                        const isSelected = selectedDate === dateStr;
-                        const day = new Date(dateStr).getDate();
-                        
-                        return (
-                          <button
-                            key={dateStr}
-                            disabled={!isAvailable}
-                            onClick={() => { setSelectedDate(dateStr); setSelectedSlot(null); }}
-                            className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                              isSelected ? 'bg-blue-600 text-white shadow-md' :
-                              isAvailable ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' :
-                              'text-slate-300 cursor-not-allowed'
-                            }`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="p-8 md:w-1/2 bg-slate-50/50">
-                    {selectedDate ? (
-                      <div className="animate-in fade-in">
-                        <p className="text-sm font-black text-slate-500 mb-4 flex items-center gap-2">
-                          <CalendarIcon size={16} /> {selectedDate}
-                        </p>
-                        <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                          {availableTimesForSelectedDate.length > 0 ? (
-                            availableTimesForSelectedDate.map(slot => (
-                              <button
-                                key={slot.id}
-                                onClick={() => setSelectedSlot(slot)}
-                                className={`w-full p-4 rounded-[1rem] border-2 transition-all flex items-center justify-between group ${
-                                  selectedSlot?.id === slot.id ? 'border-blue-600 bg-white shadow-md ring-2 ring-blue-600/20' : 'border-slate-200 bg-white hover:border-blue-300'
-                                }`}
-                              >
-                                <span className={`font-black text-lg ${selectedSlot?.id === slot.id ? 'text-blue-600' : 'text-slate-700'}`}>
-                                  {slot.time}
-                                </span>
-                                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                  selectedSlot?.id === slot.id ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-500'
-                                }`}>
-                                  <MapPin size={12}/> <span className="truncate max-w-[100px]">{slot.location || '장소 미지정'}</span>
-                                </div>
-                              </button>
-                            ))
-                          ) : (
-                            <p className="text-sm font-bold text-slate-400">선택한 날짜에 가능한 시간이 없습니다.</p>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-slate-400">
-                        <CalendarIcon size={40} className="mb-4 opacity-30 text-blue-500"/>
-                        <p className="font-bold text-slate-500">달력에서 날짜를 선택해주세요</p>
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              </section>
-
-              <section className={!selectedSlot ? 'opacity-30 pointer-events-none transition-all duration-500' : 'transition-all duration-500'}>
-                <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900">
-                  <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm">2</span>
-                  상담 요청 사항 및 파일 업로드
-                </h2>
-                
-                <div className="space-y-6">
-                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
-                    <label className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
-                      <MessageSquareText size={14} className="text-blue-500" /> 멘토링 시 궁금한 점 (선택)
-                    </label>
-                    <textarea 
-                      value={requestText}
-                      onChange={e => setRequestText(e.target.value)}
-                      placeholder="예: 사업 아이템의 시장성에 대해 피드백 받고 싶습니다."
-                      className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[1.5rem] outline-none focus:border-blue-500 resize-none h-32 text-sm font-bold text-slate-700 transition-all"
-                    />
-                  </div>
-
-                  <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
-                    <label className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
-                      <FileText size={14} className="text-blue-500" /> 사업계획서 또는 참고자료 (선택)
-                    </label>
-                    <label className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed border-slate-200 rounded-[1.5rem] cursor-pointer hover:bg-slate-50 transition-colors">
-                      {file ? (
-                        <div className="flex flex-col items-center gap-2">
-                          <FileText className="text-blue-600" size={40} />
-                          <span className="text-sm font-bold text-slate-700">{file.name}</span>
-                          <span className="text-xs text-slate-400">클릭하여 파일 변경</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <Upload className="text-slate-300" size={40} />
-                          <span className="text-sm font-bold text-slate-500">파일 선택 또는 드래그</span>
-                          <span className="text-xs text-slate-400 font-medium">PDF, DOCX (최대 10MB)</span>
-                        </div>
-                      )}
-                      <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-                    </label>
-                  </div>
-                </div>
-              </section>
-
-              <section className={!selectedSlot ? 'opacity-30 pointer-events-none' : ''}>
-                <button
-                  onClick={handleBooking}
-                  disabled={isSubmitting || !user || !selectedSlot}
-                  className="w-full py-5 bg-slate-900 text-white font-black rounded-[1.5rem] hover:bg-blue-600 disabled:opacity-50 transition-all shadow-xl shadow-slate-200 flex justify-center items-center gap-3 text-lg active:scale-[0.98]"
-                >
-                  {isSubmitting ? <Loader2 className="animate-spin" size={24} /> : <CheckCircle size={24} />}
-                  예약 신청 완료하기
-                </button>
-                {!user && <p className="text-center mt-4 text-red-500 text-sm font-bold">로그인이 필요한 서비스입니다.</p>}
-              </section>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="space-y-8 h-fit lg:sticky lg:top-24">
+          <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
+              <h3 className="font-black text-lg text-slate-900">{year}년 {month + 1}월</h3>
+              <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronRight size={20} className="text-slate-600"/></button>
             </div>
-          )}
+            
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-black text-slate-400 mb-4">
+              <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+            </div>
+            
+            <div className="grid grid-cols-7 gap-y-1">
+              {calendarDays.map((dateStr, i) => {
+                if (!dateStr) return <div key={`empty-${i}`} className="p-2"></div>;
+                
+                const hasSlot = availableDates.includes(dateStr);
+                const isSelected = selectedDate === dateStr;
+                const day = new Date(dateStr).getDate();
+                
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => setSelectedDate(dateStr)}
+                    className={`w-9 h-9 mx-auto rounded-full flex flex-col items-center justify-center text-sm font-bold transition-all relative ${
+                      isSelected ? 'bg-blue-600 text-white shadow-md' :
+                      hasSlot ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' :
+                      'text-slate-400 hover:bg-slate-50'
+                    }`}
+                  >
+                    {day}
+                    {hasSlot && !isSelected && <div className="absolute bottom-1 w-1 h-1 bg-blue-400 rounded-full"></div>}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xl">
+            <h2 className="font-bold mb-6 flex items-center gap-2 text-blue-600">
+              <Layers size={20} />
+              슬롯 일괄 생성
+            </h2>
+            <form onSubmit={handleBulkAddSlots} className="space-y-5">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 날짜</label>
+                <input 
+                  type="date" 
+                  required
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">시작 시간</label>
+                  <select 
+                    required
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                  >
+                    {timeOptions.map(time => (
+                      <option key={`start-${time}`} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">종료 시간</label>
+                  <select 
+                    required
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                  >
+                    {timeOptions.map(time => (
+                      <option key={`end-${time}`} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 장소 (링크 포함 가능)</label>
+                <input 
+                  type="text" 
+                  required
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="예: 온라인(Zoom), 스타트업 카페 2층"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">상담 단위 (간격)</label>
+                <select 
+                  value={interval}
+                  onChange={(e) => setInterval(Number(e.target.value))}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer"
+                >
+                  <option value={30}>30분 단위</option>
+                  <option value={60}>1시간 단위</option>
+                  <option value={90}>1시간 30분 단위</option>
+                  <option value={120}>2시간 단위</option>
+                </select>
+              </div>
+
+              <button 
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-all shadow-lg flex justify-center items-center gap-2 mt-4"
+              >
+                {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
+                슬롯 일괄 생성하기
+              </button>
+            </form>
+          </section>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl sticky top-8">
-            <h3 className="text-lg font-black mb-8 flex items-center gap-2">
-              <div className="w-1.5 h-5 bg-blue-500 rounded-full"></div>
-              나의 예약 현황
-            </h3>
-            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {myBookings.length > 0 ? (
-                myBookings.map((b) => (
-                  <div key={b.id} className={`p-5 rounded-2xl border transition-all ${
-                    b.status === 'canceled' ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/10'
-                  } group`}>
-                    <div className="flex justify-between items-start mb-3">
-                      <span className={`text-sm font-black ${b.status === 'canceled' ? 'text-red-400' : 'text-white'}`}>{b.date}</span>
-                      <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase ${
-                        b.status === 'accepted' ? 'bg-green-500/20 text-green-400' : 
-                        b.status === 'completed' ? 'bg-purple-500/20 text-purple-400' : 
-                        b.status === 'canceled' ? 'bg-red-500/20 text-red-400' : 
-                        'bg-blue-500/20 text-blue-400'
-                      }`}>
-                        {b.status === 'accepted' ? '승인됨' : 
-                         b.status === 'completed' ? '완료' : 
-                         b.status === 'canceled' ? '거절됨' : '대기'}
-                      </span>
-                    </div>
-                    
-                    <div className="text-xs text-slate-400 flex items-center justify-between mb-3">
-                      <div className="flex flex-col gap-1.5 font-bold">
-                        <div className="flex items-center gap-1"><Clock size={12} /> {b.time}</div>
-                        {b.instructorName && (
-                          <div className="flex items-center gap-1 text-slate-300"><User size={12} /> {b.instructorName} 멘토</div>
+        <section className="lg:col-span-2">
+          <h2 className="font-bold text-slate-800 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar size={20} className="text-slate-400" />
+              {selectedDate} 일정 목록 ({filteredSlots.length})
+            </div>
+            {selectedDate && (
+              <button 
+                onClick={() => setSelectedDate(null)} 
+                className="text-xs text-slate-400 hover:text-blue-500 font-bold"
+              >
+                전체보기
+              </button>
+            )}
+          </h2>
+
+          <div className="space-y-4">
+            {(selectedDate ? filteredSlots : slots).length > 0 ? (
+              (selectedDate ? filteredSlots : slots).map((slot) => {
+                const booking = bookings.find(b => b.slotId === slot.id && b.status !== 'canceled');
+                return (
+                  <div key={slot.id} className={`p-6 rounded-[2rem] border transition-all ${slot.isBooked ? 'bg-blue-50 border-blue-100' : 'bg-white border-slate-100 hover:border-blue-200 shadow-sm'}`}>
+                    <div className="flex flex-col md:flex-row justify-between md:items-center gap-6">
+                      <div className="flex items-center gap-4">
+                        <div className={`p-4 rounded-2xl ${slot.isBooked ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400'}`}>
+                          <Clock size={24} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-900">{slot.date}</p>
+                          <p className="text-blue-600 font-black text-2xl">{slot.time}</p>
+                          <p className="text-[11px] text-slate-400 font-bold flex items-center gap-1 mt-1 uppercase tracking-tighter">
+                            <MapPin size={10} /> {renderTextWithLinks(slot.location || '장소 미지정')}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex-1 max-w-md">
+                        {slot.isBooked && booking ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              {booking.status === 'accepted' ? (
+                                <span className="text-[10px] font-black px-2 py-1 bg-green-600 text-white rounded-md uppercase tracking-wider flex items-center gap-1">
+                                  <CheckCircle size={10} /> Accepted
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-black px-2 py-1 bg-blue-600 text-white rounded-md uppercase tracking-wider">Reserved</span>
+                              )}
+                              <div className="flex items-center gap-1.5 text-slate-600 font-bold text-sm">
+                                <User size={14} className="text-blue-400" /> {booking.menteeName}
+                                <Mail size={14} className="text-slate-400 ml-1" /> <span className="text-xs font-medium text-slate-400">{booking.menteeEmail}</span>
+                              </div>
+                            </div>
+
+                            {booking.requestText && (
+                              <div className="bg-white/80 p-3 rounded-xl border border-blue-100/50">
+                                <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-400 uppercase tracking-tight mb-1">
+                                  <MessageSquareText size={12} /> 상담 요청 내용
+                                </div>
+                                <p className="text-xs text-slate-600 font-bold whitespace-pre-wrap leading-relaxed">{booking.requestText}</p>
+                              </div>
+                            )}
+                            
+                            {booking.businessPlanUrl && (
+                              <div className="flex items-center gap-2 bg-white/60 p-2 rounded-xl border border-blue-100">
+                                <FileText size={16} className="text-blue-500" />
+                                <span className="text-xs font-bold text-slate-600 truncate flex-1">{booking.businessPlanName || '사업계획서'}</span>
+                                <button 
+                                  onClick={() => window.open(booking.businessPlanUrl, '_blank')}
+                                  className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-sm"
+                                  title="파일 보기"
+                                >
+                                  <ExternalLink size={14} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-slate-400 font-medium text-sm italic">예약 대기 중</p>
                         )}
                       </div>
-                      {b.status === 'pending' && (
-                        <button
-                          onClick={() => handleCancelBooking(b.id, b.slotId)}
-                          className="text-red-400 hover:text-red-300 font-black text-[10px] underline decoration-red-400/30 underline-offset-4 self-start"
-                        >
-                          예약취소
-                        </button>
-                      )}
-                    </div>
 
-                    <div className="p-2.5 bg-white/5 rounded-xl border border-white/5 flex items-center gap-2 mb-2">
-                      <MapPin size={12} className="text-blue-400 shrink-0" />
-                      <span className="text-[11px] font-bold text-slate-300 truncate">
-                        {renderTextWithLinks(b.location || '장소 미지정')}
-                      </span>
-                    </div>
-
-                    {b.status === 'canceled' && (
-                      <div className="mt-3 p-3 bg-red-500/10 rounded-xl border border-red-500/20 space-y-2">
-                        <div className="flex items-center gap-1.5 text-[10px] font-black text-red-400 uppercase tracking-tight">
-                          <AlertCircle size={12} /> 거절 사유
-                        </div>
-                        <p className="text-[11px] text-red-200/80 font-bold leading-relaxed">{b.cancelReason}</p>
-                        <button 
-                          onClick={() => handleDismissCanceled(b.id)}
-                          className="w-full py-1.5 mt-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-[10px] font-black rounded-lg transition-all"
-                        >
-                          확인 및 삭제
-                        </button>
+                      <div className="flex items-center gap-2 justify-end">
+                        {slot.isBooked ? (
+                          <>
+                            {booking && booking.status !== 'accepted' && (
+                              <button 
+                                onClick={() => handleAcceptBooking(booking.id)}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-xl font-bold text-xs hover:bg-green-600 hover:text-white transition-all border border-green-100"
+                                title="예약 수락"
+                              >
+                                <CheckCircle2 size={16} /> 수락
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setCancelingSlotId(slot.id);
+                                setShowCancelModal(true);
+                              }}
+                              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-500 rounded-xl font-bold text-xs hover:bg-red-500 hover:text-white transition-all border border-red-100"
+                              title="예약 거절/취소"
+                            >
+                              <Ban size={16} /> 거절
+                            </button>
+                          </>
+                        ) : (
+                          <button 
+                            onClick={() => handleDeleteSlot(slot.id)}
+                            className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-transparent hover:border-red-100"
+                            title="슬롯 삭제"
+                          >
+                            <Trash2 size={20} />
+                          </button>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-12 text-slate-500">
-                  <p className="text-sm font-bold">예약 내역이 없습니다.</p>
-                </div>
-              )}
+                );
+              })
+            ) : (
+              <div className="py-24 text-center text-slate-400 bg-white rounded-3xl border-2 border-dashed border-slate-100">
+                {selectedDate ? `${selectedDate}에 등록된 슬롯이 없습니다.` : '등록된 슬롯이 없습니다.'}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowCancelModal(false)}>
+          <div className="bg-white rounded-[2.5rem] p-10 w-full max-w-lg shadow-2xl animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black text-slate-900">예약 거절 및 취소</h2>
+              <button onClick={() => setShowCancelModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X/></button>
+            </div>
+            
+            <p className="text-slate-500 font-medium mb-6 leading-relaxed">
+              신청자에게 전달할 거절 사유를 입력해주세요. <br/>
+              사유를 입력하면 슬롯은 다시 예약 가능 상태로 변경됩니다.
+            </p>
+
+            <textarea 
+              autoFocus
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              placeholder="예: 해당 시간에는 다른 일정이 있어 멘토링이 어렵습니다. 다른 시간을 선택해주세요."
+              className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-red-500 resize-none h-32 text-sm font-bold text-slate-700 transition-all mb-8"
+            />
+
+            <div className="flex gap-4">
+              <button 
+                onClick={confirmCancelBooking}
+                className="flex-1 bg-red-500 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-100 hover:bg-red-600 transition-all active:scale-95"
+              >
+                거절 및 취소 완료
+              </button>
+              <button 
+                onClick={() => setShowCancelModal(false)} 
+                className="px-8 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black hover:bg-slate-200 transition-all"
+              >
+                닫기
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
-  );
-}
-
-export default function MentoringPage() {
-  return (
-    <Suspense fallback={<div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" /></div>}>
-      <MentoringContent />
-    </Suspense>
   );
 }
