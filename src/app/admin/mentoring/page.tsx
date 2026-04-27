@@ -176,7 +176,7 @@ export default function AdminMentoringPage() {
               booking.menteeId,
               booking.lectureTitle || '멘토링 프로그램',
               `${slot.date} ${slot.time}`,
-              slot.location || '장소 미지정' // Pass location here
+              slot.location || '장소 미지정'
             );
           }
         }

@@ -405,7 +405,7 @@ function MentoringContent() {
                     </div>
                     <div className="text-xs text-slate-400 space-y-1 mb-3 font-bold">
                       <div className="flex items-center gap-1"><Clock size={12} /> {b.time}</div>
-                      <div className="flex items-center gap-1"><MapPin size={12} /> {b.location || '장소 미지정'}</div>
+                      <div className="flex items-center gap-1"><MapPin size={12} /> {renderTextWithLinks(b.location || '장소 미지정')}</div>
                     </div>
                     {b.status === 'pending' && (
                       <button onClick={() => handleCancelBooking(b.id, b.slotId)} className="text-red-400 text-[10px] font-black underline underline-offset-4">예약취소</button>
