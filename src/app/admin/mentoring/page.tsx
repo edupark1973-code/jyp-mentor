@@ -180,11 +180,12 @@ export default function AdminMentoringPage() {
         );
 
         alert('예약이 수락되었으며, 구글 캘린더 등록 및 멘티 안내 메일 발송이 완료되었습니다! 🎉');
-      } catch (error: any) {
-        console.error('Accept booking error:', error);
-        alert(`[처리 실패] ${error.message}`);
       }
-    };
+    } catch (error: any) {
+      console.error('Accept booking error:', error);
+      alert(`[처리 실패] ${error.message}`);
+    }
+  };
 
   const confirmCancelBooking = async () => {
     if (!cancelingSlotId || !cancelReason.trim()) {

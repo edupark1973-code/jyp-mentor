@@ -177,7 +177,8 @@ export default function AdminMentoringPage() {
           await sendMenteeApprovalNotification(
             booking.menteeId,
             booking.lectureTitle || '멘토링 프로그램',
-            `${slot.date} ${slot.time}`
+            `${slot.date} ${slot.time}`,
+            slot.location || '장소 미지정'
           );
         }
       }
