@@ -330,17 +330,17 @@ function MentoringContent() {
               <section className={!selectedSlot ? 'opacity-30 pointer-events-none transition-all duration-500' : 'transition-all duration-500'}>
                 <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900">
                   <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm">2</span>
-                  상담 요청 사항 및 파일 업로드
+                  성함(필수)과 상담 요청 사항 및 파일 업로드(선택)
                 </h2>
                 <div className="space-y-6">
                   <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
                     <label className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
-                      <MessageSquareText size={14} className="text-blue-500" /> 궁금한 점 (선택)
+                      <MessageSquareText size={14} className="text-blue-500" /> 성함(필수) / 궁금한 점 (선택)
                     </label>
                     <textarea 
                       value={requestText}
                       onChange={e => setRequestText(e.target.value)}
-                      placeholder="상담 내용을 적어주세요."
+                      placeholder="성함은 반드시 적으시고, 필요 시 상담 내용을 적어주세요."
                       className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[1.5rem] outline-none focus:border-blue-500 resize-none h-32 text-sm font-bold text-slate-700 transition-all"
                     />
                   </div>
