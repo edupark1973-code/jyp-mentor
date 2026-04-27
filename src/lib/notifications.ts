@@ -65,16 +65,19 @@ export async function sendMenteeApprovalNotification(
     const menteeEmail = menteeDoc.data().email;
     if (!menteeEmail) return;
 
-    await addDoc(collection(db, 'mail'), {
-      to: menteeEmail,
-      message: {
-        subject: `🎉 [EduReport] 멘토링 예약이 승인되었습니다!`,
-        text: `안녕하세요! 신청하신 [${lectureTitle}] 멘토링 예약이 강사님에 의해 승인되었습니다.
+    // URL을 클릭 가능한 형태로 텍스트 본문에 포함
+    const textMessage = `안녕하세요! 신청하신 [${lectureTitle}] 멘토링 예약이 강사님에 의해 승인되었습니다.
 
 🗓️ 일시: ${date}
 📍 장소/링크: ${location}
 
-정해진 시간에 늦지 않게 참여해 주세요. 감사합니다!`,
+정해진 시간에 늦지 않게 참여해 주세요. 감사합니다!`;
+
+    await addDoc(collection(db, 'mail'), {
+      to: menteeEmail,
+      message: {
+        subject: `🎉 [EduReport] 멘토링 예약이 승인되었습니다!`,
+        text: textMessage,
       },
     });
 
