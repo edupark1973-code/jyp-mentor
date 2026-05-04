@@ -172,18 +172,15 @@ export default function AdminMentoringPage() {
           throw new Error(errorData.error || '구글 캘린더 API 연동에 실패했습니다.');
         }
 
-        // 🌟 2. 멘티(수강생)에게 승인 알림 이메일 발송
-        if (booking.menteeId) {
-          await sendMenteeApprovalNotification(
-            booking.menteeId,
-            booking.lectureTitle || '멘토링 프로그램',
-            `${slot.date} ${slot.time}`,
-            slot.location || '장소 미지정'
-          );
-        }
-      }
+        await sendMenteeApprovalNotification(
+          booking.menteeId,
+          booking.lectureTitle || '멘토링 프로그램',
+          `${slot.date} ${slot.time}`,
+          slot.location || '장소 미지정'
+        );
 
-      alert('예약이 수락되었으며, 수강생에게 안내 메일이 발송되었습니다! 🎉');
+        alert('예약이 수락되었으며, 구글 캘린더 등록 및 멘티 안내 메일 발송이 완료되었습니다! 🎉');
+      }
     } catch (error: any) {
       console.error('Accept booking error:', error);
       alert(`[처리 실패] ${error.message}`);

@@ -6,8 +6,8 @@ import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Plus, Trash2, Calendar, Clock, Loader2, CheckCircle, XCircle, Layers, FileText, ExternalLink, User, Mail, Ban, CheckCircle2, MessageSquareText, X, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-// 🌟 [추가] 수강생 승인 알림 함수 임포트
-import { sendMenteeApprovalNotification } from '@/lib/notifications';
+// 🌟 [수정] 수락 알림 함수와 더불어 거절 알림 함수도 함께 임포트합니다.
+import { sendMenteeApprovalNotification, sendMenteeRejectionNotification } from '@/lib/notifications';
 
 interface Slot {
   id: string;
@@ -139,7 +139,6 @@ export default function AdminMentoringPage() {
     await deleteDoc(doc(db, 'mentoring_slots', id));
   };
 
-  // 🌟 [핵심 수정] 예약 수락 로직: 캘린더 등록 + 멘티 메일 발송
   const handleAcceptBooking = async (bookingId: string) => {
     if (!confirm('해당 예약을 수락하시겠습니까? (수락 시 구글 캘린더 등록 및 멘티에게 알림 메일이 발송됩니다)')) return;
 
@@ -187,6 +186,7 @@ export default function AdminMentoringPage() {
     }
   };
 
+  // 🌟 [핵심 수정] 거절/취소 로직: DB 업데이트 후 거절 안내 메일 발송
   const confirmCancelBooking = async () => {
     if (!cancelingSlotId || !cancelReason.trim()) {
       alert('취소 사유를 입력해주세요.');
@@ -199,7 +199,14 @@ export default function AdminMentoringPage() {
       
       const batch = writeBatch(db);
       
+      let targetMenteeId = "";
+      let targetLectureTitle = "멘토링 프로그램";
+
       snapshot.forEach((d) => {
+        const data = d.data();
+        if (data.menteeId) targetMenteeId = data.menteeId;
+        if (data.lectureTitle) targetLectureTitle = data.lectureTitle;
+
         batch.update(doc(db, 'bookings', d.id), {
           status: 'canceled',
           cancelReason: cancelReason.trim(),
@@ -213,7 +220,17 @@ export default function AdminMentoringPage() {
       });
 
       await batch.commit();
-      alert('예약이 성공적으로 거절/취소되었습니다.');
+
+      // 🌟 DB 업데이트 완료 후 멘티에게 거절 알림 발송
+      if (targetMenteeId) {
+        sendMenteeRejectionNotification(
+          targetMenteeId,
+          targetLectureTitle,
+          cancelReason.trim() // 강사님이 입력한 사유를 전달
+        ).catch(err => console.error('거절 알림 메일 발송 실패:', err)); // 백그라운드 처리로 에러 시 멈춤 방지
+      }
+
+      alert('예약이 성공적으로 거절되었으며, 수강생에게 안내 메일이 발송되었습니다.');
       setShowCancelModal(false);
       setCancelingSlotId(null);
       setCancelReason('');

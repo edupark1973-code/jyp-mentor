@@ -86,3 +86,39 @@ export async function sendMenteeApprovalNotification(
     console.error('멘티 알림 발송 중 에러:', error);
   }
 }
+
+/**
+ * 🌟 3. [멘티 알림] 예약 거절(취소) 시 멘티에게 거절 사유와 함께 알림 메일 발송
+ */
+export async function sendMenteeRejectionNotification(
+  menteeUid: string,
+  lectureTitle: string,
+  cancelReason: string
+) {
+  try {
+    const menteeDoc = await getDoc(doc(db, 'users', menteeUid));
+    if (!menteeDoc.exists()) return;
+
+    const menteeEmail = menteeDoc.data().email;
+    if (!menteeEmail) return;
+
+    const textMessage = `안녕하세요. 신청하신 [${lectureTitle}] 멘토링 예약이 아래와 같은 사유로 아쉽게도 취소/반려되었습니다.
+
+💬 강사님 메시지:
+${cancelReason}
+
+일정을 확인하신 후, 가능한 다른 시간대에 다시 신청해 주시기 바랍니다. 감사합니다.`;
+
+    await addDoc(collection(db, 'mail'), {
+      to: menteeEmail,
+      message: {
+        subject: `[EduReport] 멘토링 예약 취소/반려 안내`,
+        text: textMessage,
+      },
+    });
+
+    console.log('멘티에게 거절 사유 알림 메일 발송 완료!');
+  } catch (error) {
+    console.error('멘티 거절 알림 발송 중 에러:', error);
+  }
+}
