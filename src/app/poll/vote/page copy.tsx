@@ -16,7 +16,9 @@ function VoteContent() {
   useEffect(() => {
     if (!lectureId) return;
     
+    // independent_polls 컬렉션에서 데이터 가져오기
     const q = query(collection(db, 'independent_polls'), where('lectureId', '==', lectureId));
+    
     const unsub = onSnapshot(q, (s) => {
       const allPolls = s.docs.map(d => ({ id: d.id, ...d.data() }));
       setPolls(allPolls);
@@ -42,11 +44,14 @@ function VoteContent() {
 
       let currentOptions = pollSnap.data().options || [];
 
+      // 데이터베이스에 단순 문자열로 저장되어 있다면 객체 형태로 안전하게 변환
       if (currentOptions.length > 0 && typeof currentOptions[0] === 'string') {
         currentOptions = currentOptions.map((text: string) => ({ text, votes: 0 }));
       }
 
+      // 투표수 증가
       currentOptions[optionIndex].votes = (currentOptions[optionIndex].votes || 0) + 1;
+
       await updateDoc(pollRef, { options: currentOptions });
       
       const newVoted = [...votedIds, pollId];
@@ -64,8 +69,7 @@ function VoteContent() {
     <div className="min-h-screen bg-[#f8fafc] p-5 text-slate-900">
       <div className="max-w-md mx-auto">
         <header className="flex items-center gap-4 mb-8">
-          
-          {/* 🌟 순수하게 새 탭을 완전하게 종료하는 흰색 닫기 버튼 */}
+          {/* 🌟 수정된 창 닫기 버튼 (디자인 통일 및 window.close만 적용) */}
           <button 
             onClick={() => window.close()} 
             className="p-3 bg-white hover:bg-slate-50 rounded-2xl border border-slate-200 text-slate-900 transition-all z-50 shadow-sm flex items-center gap-2 font-bold text-sm"
@@ -73,7 +77,6 @@ function VoteContent() {
           >
             <ChevronLeft size={20} /> 창 닫기
           </button>
-          
           <h1 className="text-xl font-black flex items-center gap-2">
             <Vote className="text-blue-600" size={24} /> 실시간 투표
           </h1>
@@ -86,6 +89,7 @@ function VoteContent() {
                 <p className="font-bold text-lg mb-4">{poll.question}</p>
                 <div className="grid gap-2">
                   {poll.options.map((opt: any, idx: number) => {
+                    // 항목이 단순 단어인지 객체인지 파악하여 글씨를 제대로 뽑아냄
                     const optionText = typeof opt === 'string' ? opt : opt.text;
 
                     return (
