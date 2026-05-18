@@ -1,14 +1,13 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Vote, Loader2, CheckCircle2, ChevronLeft } from 'lucide-react';
 
 function VoteContent() {
   const searchParams = useSearchParams();
-  const router = useRouter(); // 🌟 라우터 사용
   const lectureId = searchParams.get('id');
   const pollId = searchParams.get('pollId');
   const [polls, setPolls] = useState<any[]>([]);
@@ -64,29 +63,19 @@ function VoteContent() {
     }
   };
 
-  // 🌟 [핵심 수정] 스마트폰 QR 접속 등 창이 안 닫히는 환경을 위한 우회 로직
-  const handleLeave = () => {
-    // 1. 먼저 창 닫기를 시도합니다.
-    window.close();
-    
-    // 2. 브라우저가 창 닫기를 막았다면(0.1초 대기), 투표 목록 페이지로 자연스럽게 이동시킵니다.
-    setTimeout(() => {
-      router.push(`/poll/manager?id=${lectureId}`);
-    }, 100);
-  };
-
   if (!lectureId) return <div className="p-10 text-center text-slate-500 font-bold">강의 정보가 없습니다.</div>;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] p-5 text-slate-900">
       <div className="max-w-md mx-auto">
         <header className="flex items-center gap-4 mb-8">
+          {/* 🌟 수정된 창 닫기 버튼 (디자인 통일 및 window.close만 적용) */}
           <button 
-            onClick={handleLeave} 
-            className="p-2 bg-white rounded-xl shadow-sm hover:bg-slate-50 transition-colors flex items-center gap-1 font-bold text-xs pr-3 border border-slate-100"
-            title="나가기"
+            onClick={() => window.close()} 
+            className="p-3 bg-white hover:bg-slate-50 rounded-2xl border border-slate-200 text-slate-900 transition-all z-50 shadow-sm flex items-center gap-2 font-bold text-sm"
+            title="창 닫기"
           >
-            <ChevronLeft size={16} /> 나가기
+            <ChevronLeft size={20} /> 창 닫기
           </button>
           <h1 className="text-xl font-black flex items-center gap-2">
             <Vote className="text-blue-600" size={24} /> 실시간 투표
@@ -100,6 +89,7 @@ function VoteContent() {
                 <p className="font-bold text-lg mb-4">{poll.question}</p>
                 <div className="grid gap-2">
                   {poll.options.map((opt: any, idx: number) => {
+                    // 항목이 단순 단어인지 객체인지 파악하여 글씨를 제대로 뽑아냄
                     const optionText = typeof opt === 'string' ? opt : opt.text;
 
                     return (
