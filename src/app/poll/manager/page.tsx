@@ -54,8 +54,6 @@ function PollManagerContent() {
     setOptions(['', '']);
   };
 
-  // 🌟 (삭제됨) if (role !== 'admin') return <div className="...">권한이 없습니다.</div>;
-
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-900">
       <div className="max-w-4xl mx-auto">
@@ -70,7 +68,7 @@ function PollManagerContent() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* 왼쪽: 투표 생성 폼 (🌟 강사님에게만 보입니다!) */}
+          {/* 왼쪽: 투표 생성 폼 (강사 전용) */}
           {role === 'admin' && (
             <div className="md:col-span-1 space-y-6">
               <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-purple-100">
@@ -117,8 +115,7 @@ function PollManagerContent() {
             </div>
           )}
 
-          {/* 오른쪽: 생성된 투표 목록 (🌟 누구나 볼 수 있습니다!) */}
-          {/* 강사님이 아니면 폼이 사라지므로 전체 영역(col-span-3)을 사용하게 합니다 */}
+          {/* 오른쪽: 생성된 투표 목록 (누구나 조회 가능) */}
           <div className={`${role === 'admin' ? 'md:col-span-2' : 'md:col-span-3 max-w-2xl mx-auto w-full'} space-y-4`}>
             <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 mb-4">현재 진행 중인 투표 리스트</h2>
             {polls.length === 0 && (
@@ -136,7 +133,7 @@ function PollManagerContent() {
                 </div>
                 
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
-                  {/* 🌟 수강생을 위한 "투표 참여하기" 버튼 추가 */}
+                  {/* 🌟 1. 참여 버튼 (누구나 이용 가능) */}
                   <button 
                     onClick={() => window.open(`/poll/vote?id=${lectureId}&pollId=${poll.id}`, '_blank')}
                     className="p-3 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 transition-all font-bold text-sm flex-1 sm:flex-none flex items-center justify-center gap-2"
@@ -144,7 +141,16 @@ function PollManagerContent() {
                     <Vote size={18} /> 참여
                   </button>
                   
-                  {/* 🌟 결과창 보기, QR코드, 삭제 버튼은 관리자만 보이도록 숨김 */}
+                  {/* 🌟 2. QR 코드 보기 버튼 (강사 조건문 밖으로 탈출하여 수강생도 이용 가능) */}
+                  <button 
+                    onClick={() => setShowQr(poll.id)}
+                    className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-purple-50 hover:text-purple-600 transition-all"
+                    title="QR 코드 보기"
+                  >
+                    <QrCode size={20} />
+                  </button>
+                  
+                  {/* 🌟 3. 결과창 및 삭제 기능만 강사 전용 자물쇠 유지 */}
                   {role === 'admin' && (
                     <>
                       <button 
@@ -153,13 +159,6 @@ function PollManagerContent() {
                         title="실시간 결과창"
                       >
                         <BarChart3 size={20} />
-                      </button>
-                      <button 
-                        onClick={() => setShowQr(poll.id)}
-                        className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-purple-50 hover:text-purple-600 transition-all"
-                        title="QR 코드 보기"
-                      >
-                        <QrCode size={20} />
                       </button>
                       <button 
                         onClick={() => deleteDoc(doc(db, 'independent_polls', poll.id))}
@@ -175,7 +174,7 @@ function PollManagerContent() {
           </div>
         </div>
 
-        {/* QR 코드 모달 (생략: 기존 코드와 동일) */}
+        {/* QR 코드 모달 팝업 */}
         {showQr && (
           <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowQr(null)}>
             <div className="bg-white p-10 rounded-[3rem] shadow-2xl flex flex-col items-center gap-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
