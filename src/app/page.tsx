@@ -359,10 +359,10 @@ function Board({ lecture, role, onBack }: any) {
         <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0">
           <button onClick={() => { const link = `${window.location.origin}/?id=${lecture.id}`; navigator.clipboard.writeText(link); alert('복사되었습니다!'); }} className="px-4 py-2 md:px-5 md:py-2.5 bg-slate-700 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"><LinkIcon size={14} /> <span className="hidden md:inline">초대 링크</span> 복사</button>
           <button onClick={() => window.open(`/lecture/live?id=${lecture.id}`, '_blank')} className="px-4 py-2 md:px-5 md:py-2.5 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-indigo-700 active:scale-95 whitespace-nowrap"><Maximize2 size={14} /> 라이브</button>
+          <button onClick={() => window.open(`/poll/manager?id=${lecture.id}`, '_blank')} className="px-4 py-2 md:px-5 md:py-2.5 bg-purple-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 shadow-lg hover:bg-purple-700 active:scale-95 whitespace-nowrap"><BarChart3 size={14} /> 투표</button>
           {role === 'admin' && (
             <>
-              <button onClick={() => window.open(`/poll/manager?id=${lecture.id}`, '_blank')} className="px-4 py-2 md:px-5 md:py-2.5 bg-purple-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 shadow-lg hover:bg-purple-700 active:scale-95 whitespace-nowrap"><BarChart3 size={14} /> 투표</button>
-              <button onClick={() => setIsAddingSection(true)} className="px-4 py-2 md:px-5 md:py-2.5 bg-pink-500 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 shadow-lg hover:bg-pink-600 active:scale-95 whitespace-nowrap"><Plus size={14} /> 섹션 추가</button>
+          <button onClick={() => setIsAddingSection(true)} className="px-4 py-2 md:px-5 md:py-2.5 bg-pink-500 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 shadow-lg hover:bg-pink-600 active:scale-95 whitespace-nowrap"><Plus size={14} /> 섹션 추가</button>
             </>
           )}
         </div>
