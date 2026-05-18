@@ -43,12 +43,12 @@ function LiveContent() {
     <div className="flex flex-col lg:flex-row min-h-screen bg-slate-900 text-white relative">
       {/* 🌟 버튼 디자인을 투표 창과 통일성 있게 수정 */}
       <button 
-        onClick={handleClose} 
-        className="fixed top-4 left-4 md:top-8 md:left-8 p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-black transition-all z-50 shadow-lg backdrop-blur-md flex items-center gap-2 font-bold text-sm"
-        title="창 닫기"
-      >
-        <ChevronLeft size={20} /> 창 닫기
-      </button>
+  onClick={handleClose} 
+  className="fixed top-4 left-4 md:top-8 md:left-8 p-3 bg-white hover:bg-slate-50 rounded-2xl border border-slate-200 text-slate-900 transition-all z-50 shadow-lg flex items-center gap-2 font-bold text-sm"
+  title="창 닫기"
+>
+  <ChevronLeft size={20} /> 창 닫기
+</button>
 
       {/* QR 코드 섹션 (왼쪽/상단) */}
       <div className="w-full lg:w-1/3 lg:h-screen lg:border-r border-white/10 p-6 md:p-12 flex flex-col items-center justify-center text-center bg-slate-900/50 backdrop-blur-xl shrink-0">
