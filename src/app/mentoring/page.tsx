@@ -37,7 +37,7 @@ function MentoringContent() {
 
   const { user, loading: authLoading, role } = useAuthStore();
 
-  // 1. 예약 가능한 슬롯 실시간 감시
+  // 1. 예약 가능한 슬롯 실시간 감시 (🌟 과거 시간 필터링 추가됨!)
   useEffect(() => {
     const q = query(
       collection(db, 'mentoring_slots'), 
@@ -46,7 +46,20 @@ function MentoringContent() {
       orderBy('time')
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setSlots(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Slot[]);
+      const fetchedSlots = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Slot[];
+
+      // 🌟 [핵심 로직] 현재 시간 기준으로 과거 슬롯 싹 걸러내기
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+      const validSlots = fetchedSlots.filter(slot => {
+        if (slot.date > todayStr) return true; // 내일 이후 일정은 무조건 통과
+        if (slot.date === todayStr && slot.time >= currentTimeStr) return true; // 오늘 일정은 '현재 시간 이후'만 통과
+        return false; // 그 외(과거)는 싹둑!
+      });
+
+      setSlots(validSlots);
     });
     return () => unsubscribe();
   }, []);
@@ -61,7 +74,7 @@ function MentoringContent() {
     return () => unsubscribe();
   }, [user]);
 
-  // 3. 🌟 예약 신청 로직 (알림 포함)
+  // 3. 예약 신청 로직
   const handleBooking = async () => {
     if (!user || !selectedSlot) return;
     setIsSubmitting(true);
@@ -90,7 +103,7 @@ function MentoringContent() {
         businessPlanName: fileName,
         requestText: requestText.trim() || null,
         status: 'pending',
-        instructorUid: selectedSlot.instructorUid, // 수락 시 사용을 위해 추가
+        instructorUid: selectedSlot.instructorUid,
         instructorName: selectedSlot.instructorName || '멘토', 
         createdAt: serverTimestamp(),
       };
@@ -104,7 +117,7 @@ function MentoringContent() {
         menteeName: user.displayName,
       });
 
-      // 🌟 [알림 발송] 강사에게 즉시 알림을 보냅니다.
+      // 알림 발송
       if (selectedSlot.instructorUid) {
         await sendMentoringNotification(
           selectedSlot.instructorUid,

@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { Calendar as CalendarIcon, Clock, Upload, FileText, CheckCircle, Loader2, ChevronLeft, ChevronRight, MessageSquareText, AlertCircle, MapPin, User, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// ⭐ 1. 2단계에서 만든 알림 전송 함수를 불러옵니다.
+// 🌟 [중요] 강사 알림 함수 임포트
 import { sendMentoringNotification } from '@/lib/notifications';
 
 interface Slot {
@@ -35,8 +35,9 @@ function MentoringContent() {
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  const { user, loading: authLoading } = useAuthStore();
+  const { user, loading: authLoading, role } = useAuthStore();
 
+  // 1. 예약 가능한 슬롯 실시간 감시
   useEffect(() => {
     const q = query(
       collection(db, 'mentoring_slots'), 
@@ -50,6 +51,7 @@ function MentoringContent() {
     return () => unsubscribe();
   }, []);
 
+  // 2. 내 예약 내역 실시간 감시
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'bookings'), where('menteeId', '==', user.uid), orderBy('createdAt', 'desc'));
@@ -59,6 +61,7 @@ function MentoringContent() {
     return () => unsubscribe();
   }, [user]);
 
+  // 3. 🌟 예약 신청 로직 (알림 포함)
   const handleBooking = async () => {
     if (!user || !selectedSlot) return;
     setIsSubmitting(true);
@@ -67,6 +70,7 @@ function MentoringContent() {
       let fileUrl = null;
       let fileName = null;
 
+      // 파일 업로드 처리
       if (file) {
         const storageRef = ref(storage, `bookings/${user.uid}/${Date.now()}_${file.name}`);
         const uploadResult = await uploadBytes(storageRef, file);
@@ -76,7 +80,7 @@ function MentoringContent() {
 
       const bookingData = {
         menteeId: user.uid,
-        menteeName: user.displayName,
+        menteeName: user.displayName || '익명 수강생',
         menteeEmail: user.email,
         slotId: selectedSlot.id,
         date: selectedSlot.date,
@@ -86,28 +90,31 @@ function MentoringContent() {
         businessPlanName: fileName,
         requestText: requestText.trim() || null,
         status: 'pending',
+        instructorUid: selectedSlot.instructorUid, // 수락 시 사용을 위해 추가
         instructorName: selectedSlot.instructorName || '멘토', 
         createdAt: serverTimestamp(),
       };
 
-      // DB에 예약 정보 저장
+      // Firestore 저장
       await addDoc(collection(db, 'bookings'), bookingData);
+      
+      // 슬롯 점유 처리
       await updateDoc(doc(db, 'mentoring_slots', selectedSlot.id), {
         isBooked: true,
         menteeName: user.displayName,
       });
 
-      // ⭐ 2. DB 저장이 성공적으로 끝난 직후, 강사에게 알림을 발송합니다!
+      // 🌟 [알림 발송] 강사에게 즉시 알림을 보냅니다.
       if (selectedSlot.instructorUid) {
         await sendMentoringNotification(
-          selectedSlot.instructorUid,                          // 강사의 UID
-          user.displayName || '익명 수강생',                   // 신청한 수강생 이름
-          `${selectedSlot.date} ${selectedSlot.time}`,         // 예약한 날짜와 시간
-          `${selectedSlot.instructorName || '담당'} 멘토링`    // 알림에 표시될 강좌명
+          selectedSlot.instructorUid,
+          user.displayName || '익명 수강생',
+          `${selectedSlot.date} ${selectedSlot.time}`,
+          `[${selectedSlot.instructorName || '담당'}] 멘토링 신청`
         );
       }
 
-      alert('멘토링 예약이 완료되었습니다!');
+      alert('멘토링 예약이 완료되었습니다! 강사님의 승인을 기다려주세요.');
       setSelectedSlot(null);
       setSelectedDate(null);
       setFile(null);
@@ -131,7 +138,6 @@ function MentoringContent() {
       alert('예약이 취소되었습니다.');
     } catch (error) {
       console.error('Cancel error:', error);
-      alert('취소 처리 중 오류가 발생했습니다.');
     }
   };
 
@@ -158,6 +164,7 @@ function MentoringContent() {
     <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" size={40} /></div>
   );
 
+  // 멘토 리스트 추출
   const uniqueInstructors = Array.from(new Set(slots.map(s => s.instructorUid))).map(uid => {
     const slot = slots.find(s => s.instructorUid === uid);
     const slotsCount = slots.filter(s => s.instructorUid === uid).length;
@@ -184,7 +191,7 @@ function MentoringContent() {
   const handleNextMonth = () => setCurrentMonth(new Date(year, month + 1, 1));
 
   return (
-    <div className="max-w-6xl mx-auto p-6 md:p-12">
+    <div className="max-w-6xl mx-auto p-6 md:p-12 text-slate-900">
       <header className="flex items-center gap-4 mb-12 relative">
         <button 
           onClick={() => {
@@ -201,7 +208,7 @@ function MentoringContent() {
           <ChevronLeft size={24} className="text-slate-600" />
         </button>
         <div>
-          <h1 className="text-3xl font-black text-slate-900">
+          <h1 className="text-3xl font-black">
             {selectedInstructorUid ? '1:1 멘토링 예약' : '멘토 선택'}
           </h1>
           <p className="text-slate-500 font-medium">
@@ -238,10 +245,9 @@ function MentoringContent() {
                     <ArrowRight className="text-slate-300 group-hover:text-blue-600 transition-colors" />
                   </div>
                 ))}
-                
                 {uniqueInstructors.length === 0 && (
                   <div className="col-span-full py-16 text-center text-slate-400 bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 font-bold">
-                    현재 멘토링 가능한 멘토가 없습니다.
+                    현재 예약 가능한 멘토가 없습니다.
                   </div>
                 )}
               </div>
@@ -250,34 +256,26 @@ function MentoringContent() {
 
           {selectedInstructorUid && (
             <div className="space-y-12 animate-in fade-in slide-in-from-right-8">
-              
               <section>
                 <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900">
                   <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm">1</span>
                   날짜 및 시간 선택
                 </h2>
-                
                 <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden flex flex-col md:flex-row">
-                  
                   <div className="p-8 md:w-1/2 md:border-r border-slate-100 bg-white">
                     <div className="flex items-center justify-between mb-6">
                       <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronLeft size={20} className="text-slate-600"/></button>
                       <h3 className="font-black text-lg text-slate-900">{year}년 {month + 1}월</h3>
                       <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><ChevronRight size={20} className="text-slate-600"/></button>
                     </div>
-                    
                     <div className="grid grid-cols-7 gap-2 text-center text-xs font-black text-slate-400 mb-4">
                       <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
                     </div>
-                    
                     <div className="grid grid-cols-7 gap-y-2 gap-x-1">
                       {calendarDays.map((dateStr, i) => {
                         if (!dateStr) return <div key={`empty-${i}`} className="p-2"></div>;
-                        
                         const isAvailable = availableDates.includes(dateStr);
                         const isSelected = selectedDate === dateStr;
-                        const day = new Date(dateStr).getDate();
-                        
                         return (
                           <button
                             key={dateStr}
@@ -285,17 +283,15 @@ function MentoringContent() {
                             onClick={() => { setSelectedDate(dateStr); setSelectedSlot(null); }}
                             className={`w-10 h-10 mx-auto rounded-full flex items-center justify-center text-sm font-bold transition-all ${
                               isSelected ? 'bg-blue-600 text-white shadow-md' :
-                              isAvailable ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' :
-                              'text-slate-300 cursor-not-allowed'
+                              isAvailable ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'text-slate-300 cursor-not-allowed'
                             }`}
                           >
-                            {day}
+                            {new Date(dateStr).getDate()}
                           </button>
                         );
                       })}
                     </div>
                   </div>
-
                   <div className="p-8 md:w-1/2 bg-slate-50/50">
                     {selectedDate ? (
                       <div className="animate-in fade-in">
@@ -303,76 +299,65 @@ function MentoringContent() {
                           <CalendarIcon size={16} /> {selectedDate}
                         </p>
                         <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                          {availableTimesForSelectedDate.length > 0 ? (
-                            availableTimesForSelectedDate.map(slot => (
-                              <button
-                                key={slot.id}
-                                onClick={() => setSelectedSlot(slot)}
-                                className={`w-full p-4 rounded-[1rem] border-2 transition-all flex items-center justify-between group ${
-                                  selectedSlot?.id === slot.id ? 'border-blue-600 bg-white shadow-md ring-2 ring-blue-600/20' : 'border-slate-200 bg-white hover:border-blue-300'
-                                }`}
-                              >
-                                <span className={`font-black text-lg ${selectedSlot?.id === slot.id ? 'text-blue-600' : 'text-slate-700'}`}>
-                                  {slot.time}
-                                </span>
-                                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                  selectedSlot?.id === slot.id ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-500'
-                                }`}>
-                                  <MapPin size={12}/> <span className="truncate max-w-[100px]">{slot.location || '장소 미지정'}</span>
-                                </div>
-                              </button>
-                            ))
-                          ) : (
-                            <p className="text-sm font-bold text-slate-400">선택한 날짜에 가능한 시간이 없습니다.</p>
-                          )}
+                          {availableTimesForSelectedDate.map(slot => (
+                            <button
+                              key={slot.id}
+                              onClick={() => setSelectedSlot(slot)}
+                              className={`w-full p-4 rounded-[1rem] border-2 transition-all flex items-center justify-between group ${
+                                selectedSlot?.id === slot.id ? 'border-blue-600 bg-white shadow-md ring-2 ring-blue-600/20' : 'border-slate-200 bg-white hover:border-blue-300'
+                              }`}
+                            >
+                              <span className={`font-black text-lg ${selectedSlot?.id === slot.id ? 'text-blue-600' : 'text-slate-700'}`}>{slot.time}</span>
+                              <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                                selectedSlot?.id === slot.id ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-500'
+                              }`}>
+                                <MapPin size={12}/> <span className="truncate max-w-[100px]">{slot.location || '장소 미지정'}</span>
+                              </div>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center h-full min-h-[200px] text-slate-400">
                         <CalendarIcon size={40} className="mb-4 opacity-30 text-blue-500"/>
-                        <p className="font-bold text-slate-500">달력에서 날짜를 선택해주세요</p>
+                        <p className="font-bold">달력에서 날짜를 선택해주세요</p>
                       </div>
                     )}
                   </div>
-
                 </div>
               </section>
 
               <section className={!selectedSlot ? 'opacity-30 pointer-events-none transition-all duration-500' : 'transition-all duration-500'}>
                 <h2 className="text-xl font-bold mb-6 flex items-center gap-3 text-slate-900">
                   <span className="flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm">2</span>
-                  상담 요청 사항 및 파일 업로드
+                  성함(필수)과 상담 요청 사항 및 파일 업로드(선택)
                 </h2>
-                
                 <div className="space-y-6">
                   <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
                     <label className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
-                      <MessageSquareText size={14} className="text-blue-500" /> 멘토링 시 궁금한 점 (선택)
+                      <MessageSquareText size={14} className="text-blue-500" /> 성함(필수) / 궁금한 점 (선택)
                     </label>
                     <textarea 
                       value={requestText}
                       onChange={e => setRequestText(e.target.value)}
-                      placeholder="예: 사업 아이템의 시장성에 대해 피드백 받고 싶습니다."
+                      placeholder="성함은 반드시 적으시고, 필요 시 상담 내용을 적어주세요."
                       className="w-full p-6 bg-slate-50 border border-slate-100 rounded-[1.5rem] outline-none focus:border-blue-500 resize-none h-32 text-sm font-bold text-slate-700 transition-all"
                     />
                   </div>
-
                   <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
                     <label className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest mb-4">
-                      <FileText size={14} className="text-blue-500" /> 사업계획서 또는 참고자료 (선택)
+                      <FileText size={14} className="text-blue-500" /> 자료 업로드 (선택)
                     </label>
                     <label className="flex flex-col items-center justify-center w-full h-44 border-2 border-dashed border-slate-200 rounded-[1.5rem] cursor-pointer hover:bg-slate-50 transition-colors">
                       {file ? (
                         <div className="flex flex-col items-center gap-2">
                           <FileText className="text-blue-600" size={40} />
-                          <span className="text-sm font-bold text-slate-700">{file.name}</span>
-                          <span className="text-xs text-slate-400">클릭하여 파일 변경</span>
+                          <span className="text-sm font-bold">{file.name}</span>
                         </div>
                       ) : (
                         <div className="flex flex-col items-center gap-2">
                           <Upload className="text-slate-300" size={40} />
-                          <span className="text-sm font-bold text-slate-500">파일 선택 또는 드래그</span>
-                          <span className="text-xs text-slate-400 font-medium">PDF, DOCX (최대 10MB)</span>
+                          <span className="text-sm font-bold text-slate-500 font-black">클릭하여 파일 업로드</span>
                         </div>
                       )}
                       <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
@@ -390,12 +375,13 @@ function MentoringContent() {
                   {isSubmitting ? <Loader2 className="animate-spin" size={24} /> : <CheckCircle size={24} />}
                   예약 신청 완료하기
                 </button>
-                {!user && <p className="text-center mt-4 text-red-500 text-sm font-bold">로그인이 필요한 서비스입니다.</p>}
+                 {!user && <p className="text-center mt-4 text-red-500 text-sm font-bold">로그인이 필요한 서비스입니다.</p>}
               </section>
             </div>
           )}
         </div>
 
+        {/* 사이드바: 내 예약 현황 */}
         <div className="space-y-6">
           <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl sticky top-8">
             <h3 className="text-lg font-black mb-8 flex items-center gap-2">
@@ -407,65 +393,33 @@ function MentoringContent() {
                 myBookings.map((b) => (
                   <div key={b.id} className={`p-5 rounded-2xl border transition-all ${
                     b.status === 'canceled' ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/10'
-                  } group`}>
+                  }`}>
                     <div className="flex justify-between items-start mb-3">
-                      <span className={`text-sm font-black ${b.status === 'canceled' ? 'text-red-400' : 'text-white'}`}>{b.date}</span>
+                      <span className="text-sm font-black">{b.date}</span>
                       <span className={`text-[10px] px-2.5 py-1 rounded-full font-black uppercase ${
                         b.status === 'accepted' ? 'bg-green-500/20 text-green-400' : 
-                        b.status === 'completed' ? 'bg-purple-500/20 text-purple-400' : 
-                        b.status === 'canceled' ? 'bg-red-500/20 text-red-400' : 
-                        'bg-blue-500/20 text-blue-400'
+                        b.status === 'canceled' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'
                       }`}>
-                        {b.status === 'accepted' ? '승인됨' : 
-                         b.status === 'completed' ? '완료' : 
-                         b.status === 'canceled' ? '거절됨' : '대기'}
+                        {b.status === 'accepted' ? '승인됨' : b.status === 'canceled' ? '거절됨' : '대기'}
                       </span>
                     </div>
-                    
-                    <div className="text-xs text-slate-400 flex items-center justify-between mb-3">
-                      <div className="flex flex-col gap-1.5 font-bold">
-                        <div className="flex items-center gap-1"><Clock size={12} /> {b.time}</div>
-                        {b.instructorName && (
-                          <div className="flex items-center gap-1 text-slate-300"><User size={12} /> {b.instructorName} 멘토</div>
-                        )}
-                      </div>
-                      {b.status === 'pending' && (
-                        <button
-                          onClick={() => handleCancelBooking(b.id, b.slotId)}
-                          className="text-red-400 hover:text-red-300 font-black text-[10px] underline decoration-red-400/30 underline-offset-4 self-start"
-                        >
-                          예약취소
-                        </button>
-                      )}
+                    <div className="text-xs text-slate-400 space-y-1 mb-3 font-bold">
+                      <div className="flex items-center gap-1"><Clock size={12} /> {b.time}</div>
+                      <div className="flex items-center gap-1"><MapPin size={12} /> {renderTextWithLinks(b.location || '장소 미지정')}</div>
                     </div>
-
-                    <div className="p-2.5 bg-white/5 rounded-xl border border-white/5 flex items-center gap-2 mb-2">
-                      <MapPin size={12} className="text-blue-400 shrink-0" />
-                      <span className="text-[11px] font-bold text-slate-300 truncate">
-                        {renderTextWithLinks(b.location || '장소 미지정')}
-                      </span>
-                    </div>
-
+                    {b.status === 'pending' && (
+                      <button onClick={() => handleCancelBooking(b.id, b.slotId)} className="text-red-400 text-[10px] font-black underline underline-offset-4">예약취소</button>
+                    )}
                     {b.status === 'canceled' && (
-                      <div className="mt-3 p-3 bg-red-500/10 rounded-xl border border-red-500/20 space-y-2">
-                        <div className="flex items-center gap-1.5 text-[10px] font-black text-red-400 uppercase tracking-tight">
-                          <AlertCircle size={12} /> 거절 사유
-                        </div>
-                        <p className="text-[11px] text-red-200/80 font-bold leading-relaxed">{b.cancelReason}</p>
-                        <button 
-                          onClick={() => handleDismissCanceled(b.id)}
-                          className="w-full py-1.5 mt-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 text-[10px] font-black rounded-lg transition-all"
-                        >
-                          확인 및 삭제
-                        </button>
+                      <div className="mt-3 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
+                        <p className="text-[11px] text-red-200/80 font-bold">{b.cancelReason}</p>
+                        <button onClick={() => handleDismissCanceled(b.id)} className="w-full py-1.5 mt-2 bg-red-500/20 text-red-400 text-[10px] font-black rounded-lg">확인</button>
                       </div>
                     )}
                   </div>
                 ))
               ) : (
-                <div className="text-center py-12 text-slate-500">
-                  <p className="text-sm font-bold">예약 내역이 없습니다.</p>
-                </div>
+                <p className="text-center py-12 text-slate-500 text-sm font-bold">예약 내역이 없습니다.</p>
               )}
             </div>
           </div>
