@@ -1,14 +1,13 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Vote, Loader2, CheckCircle2, ChevronLeft } from 'lucide-react';
 
 function VoteContent() {
   const searchParams = useSearchParams();
-  const router = useRouter(); // 🌟 라우터 추가
   const lectureId = searchParams.get('id');
   const pollId = searchParams.get('pollId');
   const [polls, setPolls] = useState<any[]>([]);
@@ -70,12 +69,13 @@ function VoteContent() {
     <div className="min-h-screen bg-[#f8fafc] p-5 text-slate-900">
       <div className="max-w-md mx-auto">
         <header className="flex items-center gap-4 mb-8">
-          {/* 🌟 수정됨: 라이브 페이지가 아닌 투표 목록 창으로 안전하게 돌아갑니다 */}
+          {/* 🌟 [핵심 수정] 에러가 나는 링크 이동 대신, 다른 창들과 일관성 있게 창을 닫아버리도록 수정 */}
           <button 
-            onClick={() => router.push(`/poll/manager?id=${lectureId}`)} 
-            className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-50 transition-colors"
+            onClick={() => window.close()} 
+            className="p-2 bg-white rounded-xl shadow-sm hover:bg-slate-50 transition-colors flex items-center gap-1 font-bold text-xs pr-3 border border-slate-100"
+            title="창 닫기"
           >
-            <ChevronLeft size={20} />
+            <ChevronLeft size={16} /> 창 닫기
           </button>
           <h1 className="text-xl font-black flex items-center gap-2">
             <Vote className="text-blue-600" size={24} /> 실시간 투표
