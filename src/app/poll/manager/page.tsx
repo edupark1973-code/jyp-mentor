@@ -68,7 +68,7 @@ function PollManagerContent() {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* 왼쪽: 투표 생성 폼 (강사 전용) */}
+          {/* 왼쪽: 투표 생성 폼 (🌟 강사님 전용) */}
           {role === 'admin' && (
             <div className="md:col-span-1 space-y-6">
               <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-purple-100">
@@ -115,7 +115,7 @@ function PollManagerContent() {
             </div>
           )}
 
-          {/* 오른쪽: 생성된 투표 목록 (누구나 조회 가능) */}
+          {/* 오른쪽: 생성된 투표 목록 (🌟 누구나 조회 가능) */}
           <div className={`${role === 'admin' ? 'md:col-span-2' : 'md:col-span-3 max-w-2xl mx-auto w-full'} space-y-4`}>
             <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 mb-4">현재 진행 중인 투표 리스트</h2>
             {polls.length === 0 && (
@@ -133,7 +133,7 @@ function PollManagerContent() {
                 </div>
                 
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
-                  {/* 🌟 1. 참여 버튼 (누구나 이용 가능) */}
+                  {/* 🌟 1. 참여 버튼 (누구나) */}
                   <button 
                     onClick={() => window.open(`/poll/vote?id=${lectureId}&pollId=${poll.id}`, '_blank')}
                     className="p-3 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 transition-all font-bold text-sm flex-1 sm:flex-none flex items-center justify-center gap-2"
@@ -141,7 +141,7 @@ function PollManagerContent() {
                     <Vote size={18} /> 참여
                   </button>
                   
-                  {/* 🌟 2. QR 코드 보기 버튼 (강사 조건문 밖으로 탈출하여 수강생도 이용 가능) */}
+                  {/* 🌟 2. QR 코드 보기 버튼 (누구나) */}
                   <button 
                     onClick={() => setShowQr(poll.id)}
                     className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-purple-50 hover:text-purple-600 transition-all"
@@ -149,24 +149,25 @@ function PollManagerContent() {
                   >
                     <QrCode size={20} />
                   </button>
+
+                  {/* 🌟 3. 실시간 결과창 보기 버튼 (누구나 볼 수 있게 꺼냈습니다!) */}
+                  <button 
+                    onClick={() => window.open(`/poll/live?id=${poll.id}`, '_blank')}
+                    className="p-3 bg-indigo-50 text-indigo-400 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all"
+                    title="실시간 결과창"
+                  >
+                    <BarChart3 size={20} />
+                  </button>
                   
-                  {/* 🌟 3. 결과창 및 삭제 기능만 강사 전용 자물쇠 유지 */}
+                  {/* 🌟 4. 삭제 버튼만 관리자(강사) 전용으로 유지 */}
                   {role === 'admin' && (
-                    <>
-                      <button 
-                        onClick={() => window.open(`/poll/live?id=${poll.id}`, '_blank')}
-                        className="p-3 bg-indigo-50 text-indigo-400 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all"
-                        title="실시간 결과창"
-                      >
-                        <BarChart3 size={20} />
-                      </button>
-                      <button 
-                        onClick={() => deleteDoc(doc(db, 'independent_polls', poll.id))}
-                        className="p-3 bg-red-50 text-red-300 rounded-2xl hover:bg-red-500 hover:text-white transition-all"
-                      >
-                        <Trash2 size={20} />
-                      </button>
-                    </>
+                    <button 
+                      onClick={() => deleteDoc(doc(db, 'independent_polls', poll.id))}
+                      className="p-3 bg-red-50 text-red-300 rounded-2xl hover:bg-red-500 hover:text-white transition-all"
+                      title="투표 삭제"
+                    >
+                      <Trash2 size={20} />
+                    </button>
                   )}
                 </div>
               </div>
