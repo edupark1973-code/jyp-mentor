@@ -25,9 +25,9 @@ function PollLiveContent() {
       const allPolls = s.docs.map(d => ({ id: d.id, ...d.data() }));
       setPolls(allPolls);
       
-      // 현재 진행 중(진행 상태가 활성화)인 투표를 기본 선택하거나 첫 번째 투표 선택
+      // 🌟 [에러 수정 부분] p를 any 타입으로 지정하여 status 속성 검사 에러를 해결했습니다.
       if (allPolls.length > 0) {
-        const active = allPolls.find(p => p.status === 'active') || allPolls[0];
+        const active = allPolls.find((p: any) => p.status === 'active') || allPolls[0];
         setSelectedPoll(active);
       }
     });
@@ -42,7 +42,7 @@ function PollLiveContent() {
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-slate-900 text-white relative">
       
-      {/* 🌟 좌측 상단: 라이브 창과 100% 통일된 흰색 창 닫기 버튼 */}
+      {/* 좌측 상단: 창 닫기 버튼 */}
       <button 
         onClick={() => window.close()} 
         className="fixed top-4 left-4 md:top-8 md:left-8 p-3 bg-white hover:bg-slate-50 rounded-2xl border border-slate-200 text-slate-900 transition-all z-50 shadow-lg flex items-center gap-2 font-bold text-sm"
@@ -86,7 +86,7 @@ function PollLiveContent() {
               )}
             </div>
             
-            {/* 🌟 핵심 개선: 스마트폰으로 이 결과를 지켜보던 학생도 화면 터치로 바로 투표 팝업을 열 수 있는 참여 버튼 */}
+            {/* 참여 버튼 */}
             <button
               onClick={() => window.open(`/poll/vote?id=${lectureId}&pollId=${selectedPoll.id}`, '_blank')}
               className="w-full max-w-[220px] py-3 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-xl font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all mb-4"
