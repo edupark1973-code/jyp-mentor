@@ -54,7 +54,7 @@ function PollManagerContent() {
     setOptions(['', '']);
   };
 
-  if (role !== 'admin') return <div className="p-10 text-center font-bold">권한이 없습니다.</div>;
+  // 🌟 (삭제됨) if (role !== 'admin') return <div className="...">권한이 없습니다.</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-900">
@@ -64,59 +64,62 @@ function PollManagerContent() {
             <ChevronLeft /> 창 닫기
           </button>
           <h1 className="text-3xl font-black flex items-center gap-3">
-            <BarChart3 className="text-purple-600" size={32} /> 실시간 투표 관리 센터
+            <BarChart3 className="text-purple-600" size={32} /> 실시간 투표 {role === 'admin' ? '관리 센터' : '목록'}
           </h1>
           <div className="w-20" /> 
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* 왼쪽: 투표 생성 폼 */}
-          <div className="md:col-span-1 space-y-6">
-            <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-purple-100">
-              <h2 className="text-lg font-black mb-6 flex items-center gap-2 text-purple-600">
-                <Plus size={20} /> 새 투표 생성
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">질문 내용</label>
-                  <textarea 
-                    value={newQuestion}
-                    onChange={e => setNewQuestion(e.target.value)}
-                    placeholder="예: 오늘 강의의 난이도는?"
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-purple-500 resize-none h-24 text-sm font-bold"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">선택지</label>
-                  {options.map((opt, idx) => (
-                    <input 
-                      key={idx}
-                      value={opt}
-                      onChange={e => {
-                        const newOpts = [...options];
-                        newOpts[idx] = e.target.value;
-                        setOptions(newOpts);
-                      }}
-                      placeholder={`옵션 ${idx + 1}`}
-                      className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-purple-500 text-xs font-bold"
+          {/* 왼쪽: 투표 생성 폼 (🌟 강사님에게만 보입니다!) */}
+          {role === 'admin' && (
+            <div className="md:col-span-1 space-y-6">
+              <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-purple-100">
+                <h2 className="text-lg font-black mb-6 flex items-center gap-2 text-purple-600">
+                  <Plus size={20} /> 새 투표 생성
+                </h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">질문 내용</label>
+                    <textarea 
+                      value={newQuestion}
+                      onChange={e => setNewQuestion(e.target.value)}
+                      placeholder="예: 오늘 강의의 난이도는?"
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-purple-500 resize-none h-24 text-sm font-bold"
                     />
-                  ))}
-                  <button onClick={addOption} className="text-purple-600 text-[10px] font-black flex items-center gap-1 hover:underline">
-                    + 선택지 추가하기
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">선택지</label>
+                    {options.map((opt, idx) => (
+                      <input 
+                        key={idx}
+                        value={opt}
+                        onChange={e => {
+                          const newOpts = [...options];
+                          newOpts[idx] = e.target.value;
+                          setOptions(newOpts);
+                        }}
+                        placeholder={`옵션 ${idx + 1}`}
+                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-purple-500 text-xs font-bold"
+                      />
+                    ))}
+                    <button onClick={addOption} className="text-purple-600 text-[10px] font-black flex items-center gap-1 hover:underline">
+                      + 선택지 추가하기
+                    </button>
+                  </div>
+                  <button 
+                    onClick={createPoll}
+                    className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black shadow-lg hover:bg-purple-700 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Send size={18} /> 투표 시작하기
                   </button>
                 </div>
-                <button 
-                  onClick={createPoll}
-                  className="w-full py-4 bg-purple-600 text-white rounded-2xl font-black shadow-lg hover:bg-purple-700 transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Send size={18} /> 투표 시작하기
-                </button>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* 오른쪽: 생성된 투표 목록 */}
-          <div className="md:col-span-2 space-y-4">
+          {/* 오른쪽: 생성된 투표 목록 (🌟 누구나 볼 수 있습니다!) */}
+          {/* 강사님이 아니면 폼이 사라지므로 전체 영역(col-span-3)을 사용하게 합니다 */}
+          <div className={`${role === 'admin' ? 'md:col-span-2' : 'md:col-span-3 max-w-2xl mx-auto w-full'} space-y-4`}>
             <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 mb-4">현재 진행 중인 투표 리스트</h2>
             {polls.length === 0 && (
               <div className="bg-white/50 border-2 border-dashed border-slate-200 rounded-[2.5rem] py-20 text-center text-slate-400 font-bold">
@@ -124,41 +127,55 @@ function PollManagerContent() {
               </div>
             )}
             {polls.map((poll) => (
-              <div key={poll.id} className="bg-white p-6 rounded-[2.5rem] shadow-md border border-slate-100 flex justify-between items-center group">
-                <div className="flex-1">
+              <div key={poll.id} className="bg-white p-6 rounded-[2.5rem] shadow-md border border-slate-100 flex flex-col sm:flex-row justify-between items-center group gap-4">
+                <div className="flex-1 text-center sm:text-left w-full">
                   <h3 className="font-black text-slate-800 mb-1">{poll.question}</h3>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">
                     {poll.options.length}개의 선택지 • {poll.createdAt?.toDate().toLocaleTimeString()} 생성
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
+                  {/* 🌟 수강생을 위한 "투표 참여하기" 버튼 추가 */}
                   <button 
-                    onClick={() => setShowQr(poll.id)}
-                    className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-purple-50 hover:text-purple-600 transition-all"
-                    title="QR 코드 보기"
+                    onClick={() => window.open(`/poll/vote?id=${lectureId}&pollId=${poll.id}`, '_blank')}
+                    className="p-3 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 transition-all font-bold text-sm flex-1 sm:flex-none flex items-center justify-center gap-2"
                   >
-                    <QrCode size={20} />
+                    <Vote size={18} /> 참여
                   </button>
-                  <button 
-                    onClick={() => window.open(`/poll/live?id=${poll.id}`, '_blank')}
-                    className="p-3 bg-indigo-50 text-indigo-400 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all"
-                    title="실시간 결과창"
-                  >
-                    <BarChart3 size={20} />
-                  </button>
-                  <button 
-                    onClick={() => deleteDoc(doc(db, 'independent_polls', poll.id))}
-                    className="p-3 bg-red-50 text-red-300 rounded-2xl hover:bg-red-500 hover:text-white transition-all"
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                  
+                  {/* 🌟 결과창 보기, QR코드, 삭제 버튼은 관리자만 보이도록 숨김 */}
+                  {role === 'admin' && (
+                    <>
+                      <button 
+                        onClick={() => window.open(`/poll/live?id=${poll.id}`, '_blank')}
+                        className="p-3 bg-indigo-50 text-indigo-400 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all"
+                        title="실시간 결과창"
+                      >
+                        <BarChart3 size={20} />
+                      </button>
+                      <button 
+                        onClick={() => setShowQr(poll.id)}
+                        className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-purple-50 hover:text-purple-600 transition-all"
+                        title="QR 코드 보기"
+                      >
+                        <QrCode size={20} />
+                      </button>
+                      <button 
+                        onClick={() => deleteDoc(doc(db, 'independent_polls', poll.id))}
+                        className="p-3 bg-red-50 text-red-300 rounded-2xl hover:bg-red-500 hover:text-white transition-all"
+                      >
+                        <Trash2 size={20} />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* QR 코드 모달 */}
+        {/* QR 코드 모달 (생략: 기존 코드와 동일) */}
         {showQr && (
           <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-6" onClick={() => setShowQr(null)}>
             <div className="bg-white p-10 rounded-[3rem] shadow-2xl flex flex-col items-center gap-8 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
