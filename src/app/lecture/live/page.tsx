@@ -44,7 +44,7 @@ function LiveContent() {
       {/* 🌟 버튼 디자인을 투표 창과 통일성 있게 수정 */}
       <button 
         onClick={handleClose} 
-        className="fixed top-4 left-4 md:top-8 md:left-8 p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-white transition-all z-50 shadow-lg backdrop-blur-md flex items-center gap-2 font-bold text-sm"
+        className="fixed top-4 left-4 md:top-8 md:left-8 p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-black transition-all z-50 shadow-lg backdrop-blur-md flex items-center gap-2 font-bold text-sm"
         title="창 닫기"
       >
         <ChevronLeft size={20} /> 창 닫기
