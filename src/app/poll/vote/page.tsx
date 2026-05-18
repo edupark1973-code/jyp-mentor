@@ -1,14 +1,14 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Vote, Loader2, CheckCircle2, ChevronLeft } from 'lucide-react';
-import Link from 'next/link';
 
 function VoteContent() {
   const searchParams = useSearchParams();
+  const router = useRouter(); // 🌟 라우터 추가
   const lectureId = searchParams.get('id');
   const pollId = searchParams.get('pollId');
   const [polls, setPolls] = useState<any[]>([]);
@@ -45,7 +45,7 @@ function VoteContent() {
 
       let currentOptions = pollSnap.data().options || [];
 
-      // [핵심 수정 1] 데이터베이스에 단순 문자열로 저장되어 있다면 객체 형태로 안전하게 변환
+      // 데이터베이스에 단순 문자열로 저장되어 있다면 객체 형태로 안전하게 변환
       if (currentOptions.length > 0 && typeof currentOptions[0] === 'string') {
         currentOptions = currentOptions.map((text: string) => ({ text, votes: 0 }));
       }
@@ -70,9 +70,13 @@ function VoteContent() {
     <div className="min-h-screen bg-[#f8fafc] p-5 text-slate-900">
       <div className="max-w-md mx-auto">
         <header className="flex items-center gap-4 mb-8">
-          <Link href={`/lecture/live?id=${lectureId}`} className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-50 transition-colors">
+          {/* 🌟 수정됨: 라이브 페이지가 아닌 투표 목록 창으로 안전하게 돌아갑니다 */}
+          <button 
+            onClick={() => router.push(`/poll/manager?id=${lectureId}`)} 
+            className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-50 transition-colors"
+          >
             <ChevronLeft size={20} />
-          </Link>
+          </button>
           <h1 className="text-xl font-black flex items-center gap-2">
             <Vote className="text-blue-600" size={24} /> 실시간 투표
           </h1>
@@ -85,7 +89,7 @@ function VoteContent() {
                 <p className="font-bold text-lg mb-4">{poll.question}</p>
                 <div className="grid gap-2">
                   {poll.options.map((opt: any, idx: number) => {
-                    // [핵심 수정 2] 항목이 단순 단어인지 객체인지 파악하여 글씨를 제대로 뽑아냄
+                    // 항목이 단순 단어인지 객체인지 파악하여 글씨를 제대로 뽑아냄
                     const optionText = typeof opt === 'string' ? opt : opt.text;
 
                     return (

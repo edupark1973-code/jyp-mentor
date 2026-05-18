@@ -32,25 +32,22 @@ function LiveContent() {
     if (confirm('질문을 삭제하시겠습니까?')) await deleteDoc(doc(db, 'questions', id));
   };
 
-  const handleBack = () => {
-    if (window.history.length > 1) {
-      router.back();
-    } else {
-      router.push('/');
-    }
+  // 🌟 [핵심 수정] 새 창 닫기로 통일
+  const handleClose = () => {
+    window.close();
   };
 
   if (!lectureId) return <div className="p-10 text-center">강좌 ID가 없습니다.</div>;
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-slate-900 text-white relative">
-      {/* 뒤로가기 버튼 */}
+      {/* 🌟 버튼 디자인을 투표 창과 통일성 있게 수정 */}
       <button 
-        onClick={handleBack} 
-        className="fixed top-4 left-4 md:top-8 md:left-8 p-2 md:p-3 bg-white/5 hover:bg-white/10 rounded-xl md:rounded-2xl border border-white/10 text-white transition-all z-50 shadow-lg backdrop-blur-md"
-        title="뒤로가기"
+        onClick={handleClose} 
+        className="fixed top-4 left-4 md:top-8 md:left-8 p-3 bg-white/5 hover:bg-white/10 rounded-2xl border border-white/10 text-white transition-all z-50 shadow-lg backdrop-blur-md flex items-center gap-2 font-bold text-sm"
+        title="창 닫기"
       >
-        <ChevronLeft size={20} className="md:w-6 md:h-6" />
+        <ChevronLeft size={20} /> 창 닫기
       </button>
 
       {/* QR 코드 섹션 (왼쪽/상단) */}
@@ -74,7 +71,7 @@ function LiveContent() {
 
       {/* 포스트 목록 섹션 (오른쪽/하단) */}
       <div className="w-full lg:w-2/3 lg:h-screen bg-slate-900/30 p-6 md:p-16 overflow-y-auto custom-scrollbar">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 md:mb-16">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8 md:mb-16 mt-12 md:mt-0"> {/* 🌟 닫기 버튼과 겹치지 않게 모바일 상단 마진 추가 */}
           <div className="space-y-2">
             <h1 className="text-2xl md:text-4xl font-black tracking-tight">포스트 목록</h1>
             <p className="text-slate-500 font-bold text-xs md:text-sm">실시간으로 올라오는 수강생들의 대화입니다.</p>
