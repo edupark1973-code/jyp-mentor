@@ -94,7 +94,7 @@ function SurveyContent() {
           </button>
         </div>
       </div>
-      <p className="mt-10 text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">EduFiles Live Poll System</p>
+      <p className="mt-10 text-[10px] text-slate-400 font-black uppercase tracking-[0.3em]">EduReport Live Poll System</p>
     </div>
   );
 }

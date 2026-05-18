@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EduFiles - 멘토링 및 강의 관리 시스템",
-  description: "EduFiles MVP: Next.js와 Firebase를 활용한 효율적인 교육 운영 도구",
+  title: "EduReport - 멘토링 및 강의 관리 시스템",
+  description: "EduReport: 효율적인 교육 운영 도구",
 };
 
 export default function RootLayout({
