@@ -33,19 +33,20 @@ const MAX_USER_INPUT_LENGTH = 12_000;
 const MAX_CONTEXT_LENGTH = 180_000;
 
 const STEP_OUTPUT_LIMITS: Record<number, { maxCharacters: number; maxOutputTokens: number }> = {
-  1: { maxCharacters: 1_000, maxOutputTokens: 1_200 },
-  2: { maxCharacters: 1_400, maxOutputTokens: 1_600 },
-  3: { maxCharacters: 1_400, maxOutputTokens: 1_600 },
-  4: { maxCharacters: 1_400, maxOutputTokens: 1_600 },
-  5: { maxCharacters: 1_100, maxOutputTokens: 1_300 },
-  6: { maxCharacters: 1_800, maxOutputTokens: 2_000 },
-  7: { maxCharacters: 3_500, maxOutputTokens: 3_500 },
+  1: { maxCharacters: 1_000, maxOutputTokens: 8_192 },
+  2: { maxCharacters: 1_400, maxOutputTokens: 8_192 },
+  3: { maxCharacters: 1_400, maxOutputTokens: 8_192 },
+  4: { maxCharacters: 1_400, maxOutputTokens: 8_192 },
+  5: { maxCharacters: 1_100, maxOutputTokens: 8_192 },
+  6: { maxCharacters: 3_500, maxOutputTokens: 12_000 },
+  7: { maxCharacters: 1_800, maxOutputTokens: 8_192 },
 };
 
 function buildOutputRules(currentStep: number) {
   const { maxCharacters } = STEP_OUTPUT_LIMITS[currentStep];
   return `[출력 품질 규칙 - 다른 문체 및 분량 지시보다 우선 적용]
 - 한국어 개요체로 작성함. 문장 종결은 '~함', '~필요', '~예정', '~가능' 등으로 통일함
+- 불필요한 영어 단어나 어려운 전문 용어(예: 경제적 해자, Pain Point 등) 사용을 최대한 자제하고, 누구나 이해하기 쉬운 자연스러운 우리말로 풀어서 작성함
 - 서술형 장문과 인사말을 금지함. Markdown 제목, 짧은 글머리표, 필요한 최소 표만 사용함
 - 글머리표 하나에는 핵심 주장 하나만 담고 3줄을 넘기지 않음
 - 이전 단계 내용을 그대로 반복하지 않고, 이번 단계의 판단에 필요한 결론만 짧게 인용함
@@ -104,23 +105,23 @@ const STEP_PROMPTS: Record<number, PromptConfig> = {
 자율과 책임 기반의 고성과 조직문화 원칙, 의사결정 방식, 성과관리와 갈등 해결 운영안을 도출하십시오.`,
   },
   6: {
-    stepName: '5인 가상 심사위원단 검증',
-    systemPrompt: `너는 대한민국 정부 창업지원사업 심사위원단장(페르소나 29)이다.
-심사위원단은 수익성 심사위원, 기술성 심사위원, 조직·인력 심사위원, 마케팅·GTM 심사위원, 확장성 심사위원으로 구성된 익명의 가상 전문가 집단이다.
-실제 인물로 오해할 수 있는 이름이나 소속을 임의로 만들지 말고, 결과에는 각 위원을 전문 분야명으로만 표기하라.
-각 위원은 자비심을 배제하고 사업계획서의 약점, 숨은 가정, 근거 부족을 정확히 지적해야 한다. 사실과 추론을 구분하고 존재하지 않는 근거를 만들지 말라.`,
-    task: `1~5단계 사업계획서 초안을 5인 심사위원의 관점으로 각각 평가하라.
-위원별로 강점, 치명적 결함, 확인 질문, 개선 처방, 100점 만점 점수를 제시하라.
-마지막에는 단장 명의로 탈락 위험 TOP 5, 즉시 수정 우선순위, 조건부 합격 여부를 포함한 종합 심사 보고서를 작성하라.`,
+    stepName: '최종 사업계획서 작성',
+    systemPrompt: `너는 정부지원사업과 투자심사 제출 문서를 완성하는 수석 사업계획서 편집자다.
+앞선 1~5단계의 창업가 편집본과 실제 멘토 코멘트를 반영하되 제공되지 않은 사실이나 수치를 창작하지 말라.
+사실, 추론, 향후 검증 가설을 명확히 구분하고 제출용 문서에 적합한 간결한 개요체로 완성하라.`,
+    task: `누적된 1~5단계 확정 결과와 멘토 코멘트를 통합하여 멘티가 최종 수정할 수 있는 제출용 사업계획서를 작성하라.
+문제 정의, 솔루션과 MVP, 시장·경쟁 분석, 비즈니스 모델, 시장 진입·성장 로드맵, 팀, 재무·핵심지표, 위험과 대응, 실행 일정 순서로 구성하라.
+아직 확인되지 않은 내용은 사실처럼 보완하지 말고 '추가 확인 필요'로 표시하며, 마지막에 증빙자료 준비 목록을 제시하라.`,
   },
   7: {
-    stepName: '최종 합격 사업계획서',
-    systemPrompt: `너는 정부지원사업과 투자심사를 모두 통과시키는 수석 사업계획서 편집자다.
-앞선 전문가 분석, 5인 심사위원단의 비판, 실제 멘토 피드백을 빠짐없이 반영하되 제공되지 않은 사실이나 수치를 창작하지 말라.
-사실, 추론, 향후 검증 가설을 명확히 구분하고 설득력 있는 개요체로 완성하라.`,
-    task: `누적된 1~6단계 결과와 멘토 피드백을 반영하여 최종 제출용 사업계획서를 작성하십시오.
-문제 정의, 솔루션과 MVP, 시장·경쟁 분석, 비즈니스 모델, GTM·성장 로드맵, 팀, 재무·핵심지표, 위험과 대응, 실행 일정 순서로 구성하십시오.
-심사위원 지적에 대한 보완 내용을 자연스럽게 본문에 녹이고, 마지막에 아직 검증되지 않은 가정과 증빙자료 준비 목록을 별도로 제시하십시오.`,
+    stepName: '최종안 심사위원 검증',
+    systemPrompt: `너는 대한민국 정부 창업지원사업 심사위원단장(페르소나 29)이다.
+심사위원단은 수익성 심사위원, 기술성 심사위원, 조직·인력 심사위원, 마케팅·시장 진입 심사위원, 확장성 심사위원으로 구성된 익명의 가상 전문가 집단이다.
+실제 인물로 오해할 수 있는 이름이나 소속을 임의로 만들지 말고, 결과에는 각 위원을 전문 분야명으로만 표기하라.
+이 결과는 멘티의 최종 사업계획서를 변경하는 본문이 아니라 제출 전 참고용 검증 보고서다. 사실과 추론을 구분하고 존재하지 않는 근거를 만들지 말라.`,
+    task: `Step 6에서 멘티가 수정·확정한 최종 사업계획서만을 핵심 심사 대상으로 삼아 5인 가상 심사위원의 참고용 검증 보고서를 작성하라.
+위원별로 강점, 치명적 결함, 확인 질문, 개선 권고, 100점 만점 점수를 간결하게 제시하라.
+마지막에는 탈락 위험 TOP 5, 제출 전 최종 확인사항, 조건부 합격 여부를 제시하되 사업계획서 본문을 다시 작성하지 말라.`,
   },
 };
 
@@ -168,7 +169,14 @@ async function callGemini(currentStep: number, systemPrompt: string, userPrompt:
   });
   const data = await response.json() as GeminiResponse;
   if (!response.ok) throw new Error(data.error?.message || `Gemini API 요청 실패 (${response.status})`);
-  const output = data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('').trim();
+  const candidate = data.candidates?.[0];
+  if (candidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error('AI 응답이 작성 도중 중단되었습니다. 다시 시도해 주세요.');
+  }
+  if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+    throw new Error(`AI 응답이 정상적으로 완료되지 않았습니다. (${candidate.finishReason})`);
+  }
+  const output = candidate?.content?.parts?.map((part) => part.text ?? '').join('').trim();
   if (!output) throw new Error(data.promptFeedback?.blockReason ? `AI 응답 차단: ${data.promptFeedback.blockReason}` : 'AI가 빈 응답을 반환했습니다.');
   return { output, model };
 }
@@ -223,7 +231,7 @@ export async function POST(request: Request) {
     if (missingStep) return jsonError(`Step ${missingStep} 결과를 먼저 생성하거나 저장해 주세요.`, 409);
 
     let mentorFeedback: Record<string, unknown> | undefined;
-    if (currentStep === 7) {
+    if (currentStep === 6) {
       const feedbackSnapshot = await adminDb.collection('mentor_feedbacks').doc(projectId).get();
       mentorFeedback = feedbackSnapshot.exists ? feedbackSnapshot.data() : undefined;
     }
@@ -246,6 +254,7 @@ export async function POST(request: Request) {
       userInput,
       aiOutput,
       model,
+      workflowVersion: 2,
       updatedAt: serverTimestamp(),
     }, { merge: true });
     batch.set(projectSnapshot.ref, {

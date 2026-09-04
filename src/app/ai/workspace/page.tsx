@@ -7,11 +7,11 @@ import {
   addDoc,
   collection,
   doc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
-  setDoc,
-  updateDoc,
+  writeBatch,
   where,
 } from 'firebase/firestore';
 import {
@@ -27,8 +27,10 @@ import {
   MessageSquareText,
   Save,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
+import { deleteProjectWithRelatedData } from '@/lib/deleteProject';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const STEPS = [
@@ -131,6 +133,8 @@ function ProjectEntry({ userId }: { userId: string }) {
   const [title, setTitle] = useState('');
   const [initialIdea, setInitialIdea] = useState('');
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState('');
+  const [entryError, setEntryError] = useState('');
 
   useEffect(() => {
     const projectsQuery = query(collection(db, 'projects'), where('menteeId', '==', userId));
@@ -166,12 +170,26 @@ function ProjectEntry({ userId }: { userId: string }) {
     }
   };
 
+  const deleteProject = async (project: ProjectData) => {
+    if (!window.confirm(`'${project.title}' 프로젝트를 삭제하시겠습니까?\n저장된 단계별 결과와 멘토 피드백도 함께 삭제되며 복구할 수 없습니다.`)) return;
+    setDeletingId(project.id);
+    setEntryError('');
+    try {
+      await deleteProjectWithRelatedData(project.id);
+    } catch (deleteError) {
+      console.error('프로젝트 삭제 실패:', deleteError);
+      setEntryError('프로젝트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setDeletingId('');
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <header className="mb-8"><p className="text-xs font-black uppercase tracking-[0.25em] text-blue-600">AI Business Plan Builder</p><h1 className="mt-2 text-3xl font-black text-slate-950 sm:text-4xl">내 사업계획서 워크스페이스</h1><p className="mt-3 text-slate-500">기존 프로젝트를 이어가거나 새로운 아이디어로 시작하세요.</p></header>
       <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="flex items-center gap-2 text-xl font-black"><FilePlus2 className="text-blue-600" /> 새 프로젝트</h2><div className="mt-5 space-y-4"><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="사업 아이템 이름" className="w-full rounded-2xl border border-slate-200 px-4 py-3.5 font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /><textarea value={initialIdea} onChange={(event) => setInitialIdea(event.target.value)} rows={7} placeholder="누구의 어떤 문제를 어떻게 해결할 것인지 자유롭게 적어주세요." className="w-full resize-y rounded-2xl border border-slate-200 px-4 py-3.5 leading-7 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /><button onClick={createProject} disabled={creating || !title.trim() || !initialIdea.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 font-black text-white disabled:opacity-50">{creating ? <Loader2 className="animate-spin" /> : <Sparkles />} 7단계 기획 시작하기</button></div></section>
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-black">진행 중인 프로젝트</h2><div className="mt-5 space-y-3">{projects.map((project) => <Link key={project.id} href={`/ai/workspace?projectId=${project.id}`} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-blue-50"><div><p className="font-black text-slate-900">{project.title}</p><p className="mt-1 line-clamp-1 text-xs text-slate-500">{project.initialIdea}</p></div><div className="ml-4 flex shrink-0 items-center gap-2"><span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-700">STEP {project.currentStep}</span><ChevronRight size={18} /></div></Link>)}{projects.length === 0 && <p className="py-16 text-center font-bold text-slate-400">아직 프로젝트가 없습니다.</p>}</div></section>
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-black">진행 중인 프로젝트</h2>{entryError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{entryError}</p>}<div className="mt-5 space-y-3">{projects.map((project) => <div key={project.id} className="flex items-center rounded-2xl border border-slate-100 bg-slate-50 transition hover:border-blue-200 hover:bg-blue-50"><Link href={`/ai/workspace?projectId=${project.id}`} className="flex min-w-0 flex-1 items-center justify-between p-4"><div className="min-w-0"><p className="truncate font-black text-slate-900">{project.title}</p><p className="mt-1 line-clamp-1 text-xs text-slate-500">{project.initialIdea}</p></div><div className="ml-4 flex shrink-0 items-center gap-2"><span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-700">STEP {project.currentStep}</span><ChevronRight size={18} /></div></Link><button type="button" onClick={() => void deleteProject(project)} disabled={Boolean(deletingId)} aria-label={`${project.title} 프로젝트 삭제`} className="mr-3 rounded-xl p-2.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}</button></div>)}{projects.length === 0 && <p className="py-16 text-center font-bold text-slate-400">아직 프로젝트가 없습니다.</p>}</div></section>
       </div>
     </div>
   );
@@ -266,6 +284,13 @@ function WorkspaceContent() {
     return () => { unsubscribeProject(); unsubscribeResults(); unsubscribeFeedback(); };
   }, [projectId, role, user]);
 
+  // 스텝 변경 시 화면 맨 위로 부드럽게 스크롤하는 편의성 기능 추가
+  useEffect(() => {
+    if (initializedRef.current) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [activeStep]);
+
   const maxAccessibleStep = Math.min(7, Math.max(project?.currentStep ?? 1, ...Object.keys(results).map(Number)) + 1);
 
   const selectStep = (step: number) => {
@@ -311,12 +336,22 @@ function WorkspaceContent() {
     if (!project || !draft.trim()) { setError('저장할 초안 내용을 입력해 주세요.'); return; }
     setSaving(true); setError('');
     try {
-      await setDoc(doc(db, 'step_results', `${project.id}_step_${activeStep}`), { projectId: project.id, stepNumber: activeStep, userInput: '', qaAnswers: [], aiOutput: draft.trim(), workflowVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
-      await updateDoc(doc(db, 'projects', project.id), { currentStep: Math.max(project.currentStep, Math.min(7, activeStep + 1)), updatedAt: serverTimestamp() });
+      const nextStep = Math.min(7, activeStep + 1);
+      const downstreamSnapshot = await getDocs(query(collection(db, 'step_results'), where('projectId', '==', project.id)));
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'step_results', `${project.id}_step_${activeStep}`), { projectId: project.id, stepNumber: activeStep, userInput: '', qaAnswers: [], aiOutput: draft.trim(), workflowVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+      downstreamSnapshot.docs.forEach((stepResult) => {
+        const stepNumber = Number(stepResult.data().stepNumber ?? stepResult.data().step_number ?? 0);
+        if (stepNumber > activeStep) batch.delete(stepResult.ref);
+      });
+      batch.update(doc(db, 'projects', project.id), { currentStep: nextStep, updatedAt: serverTimestamp() });
+      await batch.commit();
       if (activeStep < 7) {
-        const nextStep = activeStep + 1;
-        selectStep(nextStep);
-        if (!results[nextStep]?.aiOutput) await generateStep(nextStep);
+        activeStepRef.current = nextStep;
+        setActiveStep(nextStep);
+        setDraft('');
+        attemptedStepsRef.current.delete(nextStep);
+        await generateStep(nextStep);
       }
       else alert('최종 사업계획서가 저장되었습니다.');
     } catch (saveError) {

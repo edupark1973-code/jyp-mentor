@@ -111,7 +111,12 @@ service cloud.firestore {
         isMentor()
       );
       allow list: if isMentor();
-      allow create, update, delete: if isMentor();
+      allow create, update: if isMentor();
+      allow delete: if isMentor() || (
+        isSignedIn() &&
+        resource.data.projectId is string &&
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.menteeId == request.auth.uid
+      );
     }
     
     match /lectures/{id} { allow read, write: if true; }
