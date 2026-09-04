@@ -188,6 +188,25 @@ function HomeContent() {
           )}
         </header>
 
+        {role === 'mentee' && user && (
+          <button
+            type="button"
+            onClick={() => router.push('/ai/workspace')}
+            className="mb-8 flex w-full items-center justify-between gap-5 rounded-3xl border border-blue-400/30 bg-gradient-to-r from-blue-600 to-indigo-600 p-5 text-left shadow-xl shadow-blue-950/20 transition hover:-translate-y-0.5 hover:shadow-2xl md:mb-10 md:p-7"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white md:h-14 md:w-14">
+                <FileText size={26} />
+              </div>
+              <div>
+                <p className="text-lg font-black text-white md:text-xl">AI 사업계획서 시작·이어하기</p>
+                <p className="mt-1 text-xs font-bold text-blue-100 md:text-sm">7단계 워크스페이스에서 아이디어를 사업계획서로 완성하세요.</p>
+              </div>
+            </div>
+            <ArrowRight className="shrink-0 text-white" size={24} />
+          </button>
+        )}
+
         {role === 'mentor' && user && (
           <div className="flex bg-white/5 p-1 rounded-xl md:rounded-2xl border border-white/10 mb-8 md:mb-10 w-full md:w-fit backdrop-blur-sm">
             <button onClick={() => setViewMode('workspace')} className={`flex-1 md:flex-none px-4 md:px-6 py-2 md:py-2.5 rounded-lg md:rounded-xl font-black text-xs md:text-sm transition-all flex items-center justify-center gap-2 ${viewMode === 'workspace' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><LayoutGrid size={14} /> 내 작업실</button>
