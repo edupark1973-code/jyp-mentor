@@ -7,6 +7,7 @@ import { collection, deleteField, doc, getDoc, onSnapshot, query, serverTimestam
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Mail, Save } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { sendMentorFeedbackNotification } from '@/lib/notifications';
+import MarkdownDocument from '@/components/MarkdownDocument';
 import { useAuthStore } from '@/store/useAuthStore';
 
 interface ProjectDetail {
@@ -171,7 +172,7 @@ export default function MentorProjectDetailPage() {
             {steps.map((step) => {
               const isOpen = openSteps[step.stepNumber] ?? true;
               const isFinalPlan = step.stepNumber === 6;
-              return <section key={`${step.id}-${step.stepNumber}`} className={`overflow-hidden rounded-3xl border bg-white shadow-sm ${isFinalPlan ? 'border-blue-200' : 'border-amber-200'}`}><button onClick={() => setOpenSteps((current) => ({ ...current, [step.stepNumber]: !isOpen }))} className={`flex w-full items-center justify-between p-5 text-left sm:p-6 ${isFinalPlan ? 'bg-blue-50' : 'bg-amber-50'}`}><div><span className={`text-xs font-black ${isFinalPlan ? 'text-blue-600' : 'text-amber-700'}`}>STEP {step.stepNumber}</span><h2 className="mt-1 text-lg font-black text-slate-900">{isFinalPlan ? '멘티 최종 사업계획서' : '가상 심사위원 검증 · 참고용'}</h2></div>{isOpen ? <ChevronUp /> : <ChevronDown />}</button>{isOpen && <div className="border-t border-slate-100 p-5 sm:p-6"><p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{step.aiOutput || '생성된 결과가 없습니다.'}</p></div>}</section>;
+              return <section key={`${step.id}-${step.stepNumber}`} className={`overflow-hidden rounded-3xl border bg-white shadow-sm ${isFinalPlan ? 'border-blue-200' : 'border-amber-200'}`}><button onClick={() => setOpenSteps((current) => ({ ...current, [step.stepNumber]: !isOpen }))} className={`flex w-full items-center justify-between p-5 text-left sm:p-6 ${isFinalPlan ? 'bg-blue-50' : 'bg-amber-50'}`}><div><span className={`text-xs font-black ${isFinalPlan ? 'text-blue-600' : 'text-amber-700'}`}>STEP {step.stepNumber}</span><h2 className="mt-1 text-lg font-black text-slate-900">{isFinalPlan ? '멘티 최종 사업계획서' : '가상 심사위원 검증 · 참고용'}</h2></div>{isOpen ? <ChevronUp /> : <ChevronDown />}</button>{isOpen && <div className="border-t border-slate-100 p-5 sm:p-6"><MarkdownDocument content={step.aiOutput || '생성된 결과가 없습니다.'} /></div>}</section>;
             })}
             {steps.length === 0 && <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white px-6 py-20 text-center"><p className="font-black text-slate-500">아직 최종 검토 결과가 없습니다.</p><p className="mt-2 text-sm text-slate-400">멘티가 Step 6 최종 사업계획서를 완료하면 이곳에 표시됩니다.</p></div>}
           </main>

@@ -22,15 +22,18 @@ import {
   ChevronUp,
   Copy,
   Download,
+  Eye,
   FilePlus2,
   Loader2,
   MessageSquareText,
+  PencilLine,
   Save,
   Sparkles,
   Trash2,
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { deleteProjectWithRelatedData } from '@/lib/deleteProject';
+import MarkdownDocument from '@/components/MarkdownDocument';
 import { useAuthStore } from '@/store/useAuthStore';
 
 const STEPS = [
@@ -220,6 +223,7 @@ function WorkspaceContent() {
   const generatingStepRef = useRef<number | null>(null);
   const attemptedStepsRef = useRef(new Set<number>());
   const [draft, setDraft] = useState('');
+  const [previewMode, setPreviewMode] = useState(false);
   const [loading, setLoading] = useState(Boolean(projectId));
   const [resultsLoaded, setResultsLoaded] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -298,6 +302,7 @@ function WorkspaceContent() {
     activeStepRef.current = step;
     setActiveStep(step);
     setDraft(results[step]?.aiOutput ?? '');
+    setPreviewMode(false);
     setError('');
   };
 
@@ -327,29 +332,40 @@ function WorkspaceContent() {
   }, [project]);
 
   useEffect(() => {
-    if (!loading && resultsLoaded && project && !results[activeStep]?.aiOutput && generatingStepRef.current === null && !attemptedStepsRef.current.has(activeStep)) {
-      void generateStep(activeStep);
+    const isBrandNewProject = activeStep === 1 && project?.currentStep === 1 && Object.keys(results).length === 0;
+    if (!loading && resultsLoaded && project && isBrandNewProject && generatingStepRef.current === null && !attemptedStepsRef.current.has(1)) {
+      void generateStep(1);
     }
   }, [activeStep, generateStep, loading, project, results, resultsLoaded]);
 
   const saveAndContinue = async () => {
     if (!project || !draft.trim()) { setError('저장할 초안 내용을 입력해 주세요.'); return; }
+    const nextStep = Math.min(7, activeStep + 1);
+    const hasChanges = draft.trim() !== (results[activeStep]?.aiOutput.trim() ?? '');
+
+    if (activeStep < 7 && !hasChanges && results[nextStep]?.aiOutput) {
+      selectStep(nextStep);
+      return;
+    }
+
     setSaving(true); setError('');
     try {
-      const nextStep = Math.min(7, activeStep + 1);
-      const downstreamSnapshot = await getDocs(query(collection(db, 'step_results'), where('projectId', '==', project.id)));
       const batch = writeBatch(db);
-      batch.set(doc(db, 'step_results', `${project.id}_step_${activeStep}`), { projectId: project.id, stepNumber: activeStep, userInput: '', qaAnswers: [], aiOutput: draft.trim(), workflowVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
-      downstreamSnapshot.docs.forEach((stepResult) => {
-        const stepNumber = Number(stepResult.data().stepNumber ?? stepResult.data().step_number ?? 0);
-        if (stepNumber > activeStep) batch.delete(stepResult.ref);
-      });
+      if (hasChanges) {
+        const downstreamSnapshot = await getDocs(query(collection(db, 'step_results'), where('projectId', '==', project.id)));
+        batch.set(doc(db, 'step_results', `${project.id}_step_${activeStep}`), { projectId: project.id, stepNumber: activeStep, userInput: '', qaAnswers: [], aiOutput: draft.trim(), workflowVersion: 2, updatedAt: serverTimestamp() }, { merge: true });
+        downstreamSnapshot.docs.forEach((stepResult) => {
+          const stepNumber = Number(stepResult.data().stepNumber ?? stepResult.data().step_number ?? 0);
+          if (stepNumber > activeStep) batch.delete(stepResult.ref);
+        });
+      }
       batch.update(doc(db, 'projects', project.id), { currentStep: nextStep, updatedAt: serverTimestamp() });
       await batch.commit();
       if (activeStep < 7) {
         activeStepRef.current = nextStep;
         setActiveStep(nextStep);
         setDraft('');
+        setPreviewMode(false);
         attemptedStepsRef.current.delete(nextStep);
         await generateStep(nextStep);
       }
@@ -410,10 +426,11 @@ function WorkspaceContent() {
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
           <main className="space-y-5">
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-blue-600">{currentConfig.persona}</p><h2 className="mt-1 text-2xl font-black text-slate-950">{currentConfig.name}</h2></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-500">{activeStep === 7 ? '최종안 검증 결과 · 읽기 전용' : 'AI 자동 생성 · 직접 편집 가능'}</span></div>{generating && !draft ? <div className="flex min-h-[36rem] flex-col items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-center"><Loader2 className="animate-spin text-blue-600" size={36} /><p className="mt-4 font-black text-blue-950">Step {activeStep} {activeStep === 7 ? '심사 보고서를' : '초안을'} 자동 생성하고 있습니다.</p><p className="mt-2 text-sm text-blue-700">잠시만 기다려 주세요.</p></div> : activeStep === 7 ? <div className="min-h-[36rem] whitespace-pre-wrap rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm leading-7 text-slate-800">{draft || '심사위원 검증 결과를 준비하고 있습니다.'}</div> : <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={24} placeholder="AI가 자동으로 생성한 초안이 여기에 표시됩니다." className="w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm leading-7 text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />}<div className="mt-2 text-right text-xs font-bold text-slate-400">{draft.length.toLocaleString()}자</div></section>
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-blue-600">{currentConfig.persona}</p><h2 className="mt-1 text-2xl font-black text-slate-950">{currentConfig.name}</h2></div>{activeStep === 7 ? <span className="rounded-full bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">최종안 검증 결과 · 읽기 전용</span> : <div className="flex rounded-xl bg-slate-100 p-1"><button type="button" onClick={() => setPreviewMode(false)} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black ${!previewMode ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}><PencilLine size={14} /> 편집</button><button type="button" onClick={() => setPreviewMode(true)} className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-black ${previewMode ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}><Eye size={14} /> 문서 미리보기</button></div>}</div>{generating && !draft ? <div className="flex min-h-[36rem] flex-col items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-center"><Loader2 className="animate-spin text-blue-600" size={36} /><p className="mt-4 font-black text-blue-950">Step {activeStep} {activeStep === 7 ? '심사 보고서를' : '초안을'} 자동 생성하고 있습니다.</p><p className="mt-2 text-sm text-blue-700">잠시만 기다려 주세요.</p></div> : activeStep === 7 || previewMode ? <div className={`min-h-[36rem] rounded-2xl border p-5 ${activeStep === 7 ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}><MarkdownDocument content={draft || (activeStep === 7 ? '심사위원 검증 결과를 준비하고 있습니다.' : '미리 볼 내용이 없습니다.')} /></div> : <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={24} placeholder="AI가 자동으로 생성한 초안이 여기에 표시됩니다." className="w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm leading-7 text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100" />}<div className="mt-2 text-right text-xs font-bold text-slate-400">{draft.length.toLocaleString()}자</div></section>
 
             {error && <div className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 sm:flex-row sm:items-center"><div className="flex flex-1 gap-3"><AlertCircle className="shrink-0" size={19} />{error}</div>{!draft.trim() && !generating && <button onClick={() => { attemptedStepsRef.current.delete(activeStep); void generateStep(activeStep); }} className="rounded-xl border border-red-300 bg-white px-4 py-2 text-xs font-black hover:bg-red-100">자동 생성 다시 시도</button>}</div>}
-            {activeStep < 7 ? <div className="rounded-3xl bg-white p-4 shadow-sm"><button onClick={saveAndContinue} disabled={saving || generating || !draft.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-50">{saving || generating ? <Loader2 className="animate-spin" /> : <Save />} {saving ? '저장 후 다음 단계 AI 생성 중' : activeStep === 6 ? '최종안 확정 후 심사위원 검증' : 'AI 적용 후 다음 단계로 이동'}</button></div> : <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center"><p className="font-black text-amber-900">사업계획서 작성 및 심사위원 검증이 완료되었습니다.</p><p className="mt-1 text-sm text-amber-700">위 검증 내용은 제출 전 보완 여부를 판단하기 위한 참고 자료입니다.</p></div>}
+            {!draft.trim() && !generating && !error && <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5 text-center"><p className="font-bold text-blue-950">이 단계는 아직 생성되지 않았습니다.</p><button type="button" onClick={() => { attemptedStepsRef.current.delete(activeStep); void generateStep(activeStep); }} className="mt-3 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700">{activeStep === 7 ? '심사위원 검증 생성' : '이 단계 AI 초안 생성'}</button></div>}
+            {activeStep < 7 && draft.trim() ? <div className="rounded-3xl bg-white p-4 shadow-sm"><button onClick={saveAndContinue} disabled={saving || generating} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-50">{saving || generating ? <Loader2 className="animate-spin" /> : <Save />} {saving ? '저장 후 다음 단계 AI 생성 중' : activeStep === 6 ? '최종안 확정 후 심사위원 검증' : 'AI 적용 후 다음 단계로 이동'}</button></div> : activeStep === 7 && draft.trim() ? <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center"><p className="font-black text-amber-900">사업계획서 작성 및 심사위원 검증이 완료되었습니다.</p><p className="mt-1 text-sm text-amber-700">위 검증 내용은 제출 전 보완 여부를 판단하기 위한 참고 자료입니다.</p></div> : null}
             {activeStep >= 6 && (draft.trim() || results[6]?.aiOutput) && <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-emerald-700">Export Business Plan</p><h2 className="mt-1 text-xl font-black text-slate-950">사업계획서 결과물 내보내기</h2><p className="mt-2 text-sm text-slate-600">Step 6 최종 사업계획서를 본문으로, Step 7 심사 결과를 참고 부록으로 정리합니다.</p></div><div className="flex flex-col gap-2 sm:flex-row"><button onClick={downloadBusinessPlan} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3.5 text-sm font-black text-white transition hover:bg-emerald-800"><Download size={18} /> 사업계획서 파일 다운로드</button><button onClick={copyBusinessPlan} className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-5 py-3.5 text-sm font-black text-emerald-800 transition hover:bg-emerald-100">{copied ? <Check size={18} /> : <Copy size={18} />} {copied ? '복사 완료' : '전체 복사하기'}</button></div></div></section>}
           </main>
           <aside className="space-y-5 xl:sticky xl:top-24 xl:self-start"><FeedbackAccordion feedback={feedback} /><section className="rounded-3xl bg-slate-950 p-5 text-white"><Sparkles className="text-blue-400" /><h2 className="mt-3 font-black">자동 체이닝 작동 중</h2><p className="mt-2 text-xs leading-6 text-slate-400">Step 6에서 편집·확정한 최종 사업계획서를 기준으로 Step 7의 읽기 전용 심사 참고 보고서가 자동 생성됩니다.</p></section></aside>
