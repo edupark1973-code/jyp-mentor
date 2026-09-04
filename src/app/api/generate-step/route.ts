@@ -32,6 +32,30 @@ interface GeminiResponse {
 const MAX_USER_INPUT_LENGTH = 12_000;
 const MAX_CONTEXT_LENGTH = 180_000;
 
+const STEP_OUTPUT_LIMITS: Record<number, { maxCharacters: number; maxOutputTokens: number }> = {
+  1: { maxCharacters: 1_000, maxOutputTokens: 1_200 },
+  2: { maxCharacters: 1_400, maxOutputTokens: 1_600 },
+  3: { maxCharacters: 1_400, maxOutputTokens: 1_600 },
+  4: { maxCharacters: 1_400, maxOutputTokens: 1_600 },
+  5: { maxCharacters: 1_100, maxOutputTokens: 1_300 },
+  6: { maxCharacters: 3_500, maxOutputTokens: 3_500 },
+  7: { maxCharacters: 1_800, maxOutputTokens: 2_000 },
+};
+
+function buildOutputRules(currentStep: number) {
+  const { maxCharacters } = STEP_OUTPUT_LIMITS[currentStep];
+  return `[출력 품질 규칙 - 다른 문체 및 분량 지시보다 우선 적용]
+- 한국어 개요체로 작성함. 문장 종결은 '~함', '~필요', '~예정', '~가능' 등으로 통일함
+- 서술형 장문과 인사말을 금지함. Markdown 제목, 짧은 글머리표, 필요한 최소 표만 사용함
+- 글머리표 하나에는 핵심 주장 하나만 담고 2줄을 넘기지 않음
+- 이전 단계 내용을 그대로 반복하지 않고, 이번 단계의 판단에 필요한 결론만 짧게 인용함
+- 같은 의미의 배경 설명, 장점, 기대효과를 중복 작성하지 않음
+- 사용자 추가 입력이 없으면 내용을 추측해 부풀리지 않음. 알 수 없는 항목은 '추가 확인 필요'로 표시함
+- 근거 없는 수치, 경력, 시장 사실을 만들지 않음
+- 전체 출력은 공백 포함 약 ${maxCharacters.toLocaleString('ko-KR')}자 이내로 제한함
+- 최종 답변만 출력하고 작성 과정이나 규칙 설명은 출력하지 않음`;
+}
+
 const STEP_PROMPTS: Record<number, PromptConfig> = {
   1: {
     stepName: '초기 아이디어 구조화',
@@ -80,22 +104,23 @@ const STEP_PROMPTS: Record<number, PromptConfig> = {
 자율과 책임 기반의 고성과 조직문화 원칙, 의사결정 방식, 성과관리와 갈등 해결 운영안을 도출하십시오.`,
   },
   6: {
-    stepName: '5인 가상 심사위원단 검증',
-    systemPrompt: `너는 대한민국 정부 창업지원사업 심사위원단장(페르소나 29)이다.
-심사위원단은 이현우(수익성), 김진태(기술성), 박서연(조직력), 최민준(마케팅/GTM), 정세진(확장성)으로 구성된다.
-각 위원은 자비심을 배제하고 사업계획서의 약점, 숨은 가정, 근거 부족을 정확히 지적해야 한다. 사실과 추론을 구분하고 존재하지 않는 근거를 만들지 말라.`,
-    task: `1~5단계 사업계획서 초안을 5인 심사위원의 관점으로 각각 평가하라.
-위원별로 강점, 치명적 결함, 확인 질문, 개선 처방, 100점 만점 점수를 제시하라.
-마지막에는 단장 명의로 탈락 위험 TOP 5, 즉시 수정 우선순위, 조건부 합격 여부를 포함한 종합 심사 보고서를 작성하라.`,
+    stepName: '최종 사업계획서 작성',
+    systemPrompt: `너는 정부지원사업과 투자심사 제출 문서를 완성하는 수석 사업계획서 편집자다.
+앞선 1~5단계의 창업가 편집본과 실제 멘토 코멘트를 반영하되 제공되지 않은 사실이나 수치를 창작하지 말라.
+사실, 추론, 향후 검증 가설을 명확히 구분하고 제출용 문서에 적합한 간결한 개요체로 완성하라.`,
+    task: `누적된 1~5단계 확정 결과와 멘토 코멘트를 통합하여 멘티가 최종 수정할 수 있는 제출용 사업계획서를 작성하라.
+문제 정의, 솔루션과 MVP, 시장·경쟁 분석, 비즈니스 모델, GTM·성장 로드맵, 팀, 재무·핵심지표, 위험과 대응, 실행 일정 순서로 구성하라.
+아직 확인되지 않은 내용은 사실처럼 보완하지 말고 '추가 확인 필요'로 표시하며, 마지막에 증빙자료 준비 목록을 제시하라.`,
   },
   7: {
-    stepName: '최종 합격 사업계획서',
-    systemPrompt: `너는 정부지원사업과 투자심사를 모두 통과시키는 수석 사업계획서 편집자다.
-앞선 전문가 분석, 5인 심사위원단의 비판, 실제 멘토 피드백을 빠짐없이 반영하되 제공되지 않은 사실이나 수치를 창작하지 말라.
-사실, 추론, 향후 검증 가설을 명확히 구분하고 설득력 있는 하십시오체로 완성하라.`,
-    task: `누적된 1~6단계 결과와 멘토 피드백을 반영하여 최종 제출용 사업계획서를 작성하십시오.
-문제 정의, 솔루션과 MVP, 시장·경쟁 분석, 비즈니스 모델, GTM·성장 로드맵, 팀, 재무·핵심지표, 위험과 대응, 실행 일정 순서로 구성하십시오.
-심사위원 지적에 대한 보완 내용을 자연스럽게 본문에 녹이고, 마지막에 아직 검증되지 않은 가정과 증빙자료 준비 목록을 별도로 제시하십시오.`,
+    stepName: '최종안 심사위원 검증',
+    systemPrompt: `너는 대한민국 정부 창업지원사업 심사위원단장(페르소나 29)이다.
+심사위원단은 수익성 심사위원, 기술성 심사위원, 조직·인력 심사위원, 마케팅·GTM 심사위원, 확장성 심사위원으로 구성된 익명의 가상 전문가 집단이다.
+실제 인물로 오해할 수 있는 이름이나 소속을 임의로 만들지 말고, 결과에는 각 위원을 전문 분야명으로만 표기하라.
+이 결과는 멘티의 최종 사업계획서를 변경하는 본문이 아니라 제출 전 참고용 검증 보고서다. 사실과 추론을 구분하고 존재하지 않는 근거를 만들지 말라.`,
+    task: `Step 6에서 멘티가 수정·확정한 최종 사업계획서만을 핵심 심사 대상으로 삼아 5인 가상 심사위원의 참고용 검증 보고서를 작성하라.
+위원별로 강점, 치명적 결함, 확인 질문, 개선 권고, 100점 만점 점수를 간결하게 제시하라.
+마지막에는 탈락 위험 TOP 5, 제출 전 최종 확인사항, 조건부 합격 여부를 제시하되 사업계획서 본문을 다시 작성하지 말라.`,
   },
 };
 
@@ -108,14 +133,17 @@ function getBearerToken(request: Request) {
   return authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
 }
 
-function buildAccumulatedContext(initialIdea: string, steps: StoredStepResult[], mentorFeedback?: Record<string, unknown>) {
-  const sections = [`[초기 비즈니스 아이디어]\n${initialIdea || '초기 아이디어 미입력'}`];
+function buildAccumulatedContext(projectTitle: string, initialIdea: string, steps: StoredStepResult[], mentorFeedback?: Record<string, unknown>) {
+  const sections = [
+    `[프로젝트명]\n${projectTitle || '프로젝트명 미입력'}`,
+    `[초기 비즈니스 아이디어]\n${initialIdea || '초기 아이디어 미입력'}`,
+  ];
   for (const step of steps) {
-    sections.push(`[Step ${step.stepNumber} 창업가 입력]\n${step.userInput || '추가 입력 없음'}`);
     sections.push(`[Step ${step.stepNumber} 확정 결과 - 창업가 편집본 우선]\n${step.aiOutput}`);
   }
   if (mentorFeedback) {
-    sections.push(`[멘토 피드백 및 검증 체크리스트]\n${JSON.stringify(mentorFeedback, null, 2)}`);
+    const mentorComment = String(mentorFeedback.mentorComment ?? '').trim();
+    if (mentorComment) sections.push(`[멘토 코멘트]\n${mentorComment}`);
   }
   const context = sections.join('\n\n');
   return context.length > MAX_CONTEXT_LENGTH
@@ -123,17 +151,18 @@ function buildAccumulatedContext(initialIdea: string, steps: StoredStepResult[],
     : context;
 }
 
-async function callGemini(systemPrompt: string, userPrompt: string) {
+async function callGemini(currentStep: number, systemPrompt: string, userPrompt: string) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY 환경 변수가 설정되지 않았습니다.');
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const { maxOutputTokens } = STEP_OUTPUT_LIMITS[currentStep];
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
+      systemInstruction: { parts: [{ text: `${systemPrompt}\n\n${buildOutputRules(currentStep)}` }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-      generationConfig: { temperature: 0.45, topP: 0.9, maxOutputTokens: 8192 },
+      generationConfig: { temperature: 0.3, topP: 0.85, maxOutputTokens },
     }),
     cache: 'no-store',
   });
@@ -194,15 +223,20 @@ export async function POST(request: Request) {
     if (missingStep) return jsonError(`Step ${missingStep} 결과를 먼저 생성하거나 저장해 주세요.`, 409);
 
     let mentorFeedback: Record<string, unknown> | undefined;
-    if (currentStep === 7) {
+    if (currentStep === 6) {
       const feedbackSnapshot = await adminDb.collection('mentor_feedbacks').doc(projectId).get();
       mentorFeedback = feedbackSnapshot.exists ? feedbackSnapshot.data() : undefined;
     }
 
     const promptConfig = STEP_PROMPTS[currentStep];
-    const accumulatedContext = buildAccumulatedContext(String(projectData.initialIdea ?? ''), previousSteps, mentorFeedback);
-    const userDirective = `[누적 컨텍스트]\n${accumulatedContext}\n\n[현재 창업가 추가 요청]\n${userInput || '추가 요청 없음'}\n\n[이번 단계 과업]\n${promptConfig.task}`;
-    const { output: aiOutput, model } = await callGemini(promptConfig.systemPrompt, userDirective);
+    const accumulatedContext = buildAccumulatedContext(
+      String(projectData.title ?? ''),
+      String(projectData.initialIdea ?? ''),
+      previousSteps,
+      mentorFeedback,
+    );
+    const userDirective = `[누적 컨텍스트]\n${accumulatedContext}\n\n[현재 창업가 추가 입력]\n${userInput || '추가 입력 없음. 누적 자료에 없는 내용을 임의로 확장하지 말고, 필요한 정보는 추가 확인 필요로 표시할 것.'}\n\n[이번 단계 과업]\n${promptConfig.task}\n\n이전 단계의 본문을 재작성하지 말고 이번 단계에서 새로 결정할 핵심만 작성할 것.`;
+    const { output: aiOutput, model } = await callGemini(currentStep, promptConfig.systemPrompt, userDirective);
 
     const resultRef = adminDb.collection('step_results').doc(`${projectId}_step_${currentStep}`);
     const batch = adminDb.batch();
@@ -212,6 +246,7 @@ export async function POST(request: Request) {
       userInput,
       aiOutput,
       model,
+      workflowVersion: 2,
       updatedAt: serverTimestamp(),
     }, { merge: true });
     batch.set(projectSnapshot.ref, {
