@@ -309,7 +309,13 @@ function WorkspaceContent() {
     try {
       const token = await auth.currentUser.getIdToken();
       const response = await fetch('/api/generate-step', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ projectId: project.id, currentStep: activeStep, userInput }) });
-      const data = await response.json() as GenerateResponse;
+      const responseText = await response.text();
+      let data: GenerateResponse;
+      try {
+        data = JSON.parse(responseText) as GenerateResponse;
+      } catch {
+        throw new Error(`AI 서버가 정상 응답하지 않았습니다. 잠시 후 다시 시도해 주세요. (${response.status})`);
+      }
       if (!response.ok || !data.success || !data.aiOutput) throw new Error(data.error || 'AI 초안 생성에 실패했습니다.');
       await setDoc(doc(db, 'step_results', `${project.id}_step_${activeStep}`), { qaAnswers: deepAnswers[activeStep] ?? [] }, { merge: true });
       setDraft(data.aiOutput);

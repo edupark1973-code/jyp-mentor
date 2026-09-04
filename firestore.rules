@@ -27,10 +27,12 @@ service cloud.firestore {
         request.resource.data.role == (isDesignatedMentor() ? 'mentor' : 'mentee');
       allow update: if hasValidRole() && (
         isMentor() ||
-        (request.auth.uid == userId && request.resource.data.uid == request.auth.uid &&
-          request.resource.data.role == resource.data.role) ||
-        (request.auth.uid == userId && isDesignatedMentor() &&
-          request.resource.data.role == 'mentor')
+        (request.auth.uid == userId && request.resource.data.uid == request.auth.uid && (
+          request.resource.data.role == resource.data.get('role', '') ||
+          (request.resource.data.role == 'mentee' &&
+            !(resource.data.get('role', '') in ['mentor', 'mentee'])) ||
+          (isDesignatedMentor() && request.resource.data.role == 'mentor')
+        ))
       );
       allow delete: if isMentor();
     }
@@ -102,10 +104,13 @@ service cloud.firestore {
     }
 
     match /mentor_feedbacks/{feedbackId} {
-      allow read: if isSignedIn() && (
-        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.menteeId == request.auth.uid ||
+      // 새 프로젝트에는 아직 피드백 문서가 없을 수 있으므로 빈 문서 조회를 허용한다.
+      allow get: if isSignedIn() && (
+        !exists(/databases/$(database)/documents/mentor_feedbacks/$(feedbackId)) ||
+        get(/databases/$(database)/documents/projects/$(feedbackId)).data.menteeId == request.auth.uid ||
         isMentor()
       );
+      allow list: if isMentor();
       allow create, update, delete: if isMentor();
     }
     

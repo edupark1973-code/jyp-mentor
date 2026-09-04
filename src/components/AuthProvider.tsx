@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { ensureUserRole } from '@/lib/userRole';
+import { ensureUserRole, isDesignatedMentor } from '@/lib/userRole';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -35,7 +35,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         }
       } catch (error) {
         console.error('Failed to synchronize the user session:', error);
-        setRole(null);
+        // 기존 사용자 문서 마이그레이션이나 일시적인 Firestore 오류가 있어도
+        // 로그인한 사용자가 워크스페이스 진입점을 잃지 않도록 기본 역할을 유지한다.
+        setRole(user ? (isDesignatedMentor(user.email) ? 'mentor' : 'mentee') : null);
       } finally {
         setLoading(false);
       }

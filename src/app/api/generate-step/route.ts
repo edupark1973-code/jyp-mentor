@@ -1,5 +1,4 @@
-import { FieldValue } from 'firebase-admin/firestore';
-import { getFirebaseAdmin } from '@/lib/firebaseAdmin';
+import { getFirebaseAdmin, serverTimestamp } from '@/lib/firebaseAdmin';
 
 export const runtime = 'nodejs';
 
@@ -179,7 +178,7 @@ export async function POST(request: Request) {
 
     const stepsSnapshot = await adminDb.collection('step_results').where('projectId', '==', projectId).get();
     const previousSteps: StoredStepResult[] = stepsSnapshot.docs
-      .map((stepDoc) => {
+      .map((stepDoc: { data: () => Record<string, unknown> }) => {
         const data = stepDoc.data();
         return {
           stepNumber: Number(data.stepNumber ?? data.step_number ?? 0),
@@ -187,8 +186,8 @@ export async function POST(request: Request) {
           aiOutput: String(data.aiOutput ?? data.ai_output ?? ''),
         };
       })
-      .filter((step) => step.stepNumber > 0 && step.stepNumber < currentStep && step.aiOutput)
-      .sort((a, b) => a.stepNumber - b.stepNumber);
+      .filter((step: StoredStepResult) => step.stepNumber > 0 && step.stepNumber < currentStep && step.aiOutput)
+      .sort((a: StoredStepResult, b: StoredStepResult) => a.stepNumber - b.stepNumber);
 
     const requiredPreviousSteps = Array.from({ length: Math.max(0, currentStep - 2) }, (_, index) => index + 2);
     const missingStep = requiredPreviousSteps.find((step) => !previousSteps.some((result) => result.stepNumber === step));
@@ -213,11 +212,11 @@ export async function POST(request: Request) {
       userInput,
       aiOutput,
       model,
-      updatedAt: FieldValue.serverTimestamp(),
+      updatedAt: serverTimestamp(),
     }, { merge: true });
     batch.set(projectSnapshot.ref, {
       currentStep: Math.max(Number(projectData.currentStep ?? 1), currentStep),
-      updatedAt: FieldValue.serverTimestamp(),
+      updatedAt: serverTimestamp(),
     }, { merge: true });
     await batch.commit();
 
