@@ -14,9 +14,11 @@ function AdminUserContent() {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    // 본인이 관리자가 아니면 메인으로 튕겨냄
-    if (!authLoading && role !== 'mentor') {
-      router.push('/');
+    if (authLoading) return;
+
+    // 인증 확인이 끝난 뒤 멘토가 아니면 메인으로 이동한다.
+    if (!user || role !== 'mentor') {
+      router.replace('/');
       return;
     }
 
@@ -27,7 +29,7 @@ function AdminUserContent() {
     });
 
     return () => unsub();
-  }, [role, authLoading, router]);
+  }, [user, role, authLoading, router]);
 
   const toggleMentor = async (targetUser: any) => {
     const newRole = targetUser.role === 'mentor' ? 'mentee' : 'mentor';
