@@ -45,7 +45,7 @@ export default function Navbar() {
       setIsPublicModalOpen(false);
       setEmail(''); 
       setPassword('');
-    } catch (error) {
+    } catch {
       alert('아이디 또는 비밀번호가 일치하지 않습니다.');
     }
   };
@@ -70,6 +70,7 @@ export default function Navbar() {
                 홈
               </button>
               <Link href="/mentoring" className={`${isActive('/mentoring') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>멘토링 예약</Link>
+              {role === 'mentee' && <Link href="/ai/workspace" className={`${pathname.startsWith('/ai/workspace') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>AI 사업계획서</Link>}
             </div>
           </div>
           
@@ -111,6 +112,7 @@ export default function Navbar() {
           <div className="flex flex-col gap-2 font-bold text-slate-600">
             <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>홈</Link>
             <Link href="/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>멘토링 예약</Link>
+            {role === 'mentee' && <Link href="/ai/workspace" onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.startsWith('/ai/workspace') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>AI 사업계획서</Link>}
             {role === 'mentor' && (
               <>
                 <Link href="/admin/dashboard" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/admin/dashboard') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all border-t border-slate-50 pt-4`}>통합 대시보드</Link>
