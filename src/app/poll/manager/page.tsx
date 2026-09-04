@@ -54,7 +54,7 @@ function PollManagerContent() {
     setOptions(['', '']);
   };
 
-  if (role !== 'admin') return <div className="p-10 text-center font-bold">권한이 없습니다.</div>;
+  if (role !== 'mentor') return <div className="p-10 text-center font-bold">권한이 없습니다.</div>;
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-900">

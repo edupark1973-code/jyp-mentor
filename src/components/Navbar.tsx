@@ -74,8 +74,9 @@ export default function Navbar() {
           </div>
           
           <div className="flex items-center gap-2 md:gap-4">
-            {role === 'admin' && (
+            {role === 'mentor' && (
               <div className="hidden md:flex items-center gap-4 border-l pl-6 border-slate-200">
+                <Link href="/admin/dashboard" className={`${isActive('/admin/dashboard') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'} transition-colors font-bold text-sm`}>통합 대시보드</Link>
                 <Link href="/admin/mentoring" className={`${isActive('/admin/mentoring') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'} transition-colors font-bold text-sm`}>멘토링 관리</Link>
                 <Link href="/admin/users" className={`${isActive('/admin/users') ? 'text-blue-600' : 'text-slate-500 hover:text-blue-600'} transition-colors font-bold text-sm`}>사용자 관리</Link>
               </div>
@@ -110,8 +111,9 @@ export default function Navbar() {
           <div className="flex flex-col gap-2 font-bold text-slate-600">
             <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>홈</Link>
             <Link href="/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>멘토링 예약</Link>
-            {role === 'admin' && (
+            {role === 'mentor' && (
               <>
+                <Link href="/admin/dashboard" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/admin/dashboard') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all border-t border-slate-50 pt-4`}>통합 대시보드</Link>
                 <Link href="/admin/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/admin/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all border-t border-slate-50 pt-4`}>멘토링 관리</Link>
                 <Link href="/admin/users" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/admin/users') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>사용자 관리</Link>
               </>

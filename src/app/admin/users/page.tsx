@@ -15,7 +15,7 @@ function AdminUserContent() {
 
   useEffect(() => {
     // 본인이 관리자가 아니면 메인으로 튕겨냄
-    if (!authLoading && role !== 'admin') {
+    if (!authLoading && role !== 'mentor') {
       router.push('/');
       return;
     }
@@ -29,9 +29,9 @@ function AdminUserContent() {
     return () => unsub();
   }, [role, authLoading, router]);
 
-  const toggleAdmin = async (targetUser: any) => {
-    const newRole = targetUser.role === 'admin' ? 'user' : 'admin';
-    const message = newRole === 'admin' 
+  const toggleMentor = async (targetUser: any) => {
+    const newRole = targetUser.role === 'mentor' ? 'mentee' : 'mentor';
+    const message = newRole === 'mentor'
       ? `[${targetUser.displayName}] 님에게 관리자(강사) 권한을 부여하시겠습니까?`
       : `[${targetUser.displayName}] 님의 관리자 권한을 회수하시겠습니까?`;
 
@@ -52,7 +52,7 @@ function AdminUserContent() {
   );
 
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" /></div>;
-  if (role !== 'admin') return null;
+  if (role !== 'mentor') return null;
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-900">
@@ -99,7 +99,7 @@ function AdminUserContent() {
                     <p className="text-slate-400 text-xs font-bold">{target.email}</p>
                   </td>
                   <td className="px-8 py-6">
-                    {target.role === 'admin' ? (
+                    {target.role === 'mentor' ? (
                       <span className="flex items-center gap-1.5 text-blue-600 font-black text-xs uppercase bg-blue-50 px-3 py-1.5 rounded-full w-fit">
                         <ShieldCheck size={14} /> Instructor
                       </span>
@@ -113,14 +113,14 @@ function AdminUserContent() {
                     {/* 자기 자신의 권한은 변경 못하게 처리 */}
                     {target.id !== user?.uid && (
                       <button 
-                        onClick={() => toggleAdmin(target)}
+                        onClick={() => toggleMentor(target)}
                         className={`px-4 py-2 rounded-xl font-black text-xs transition-all ${
-                          target.role === 'admin'
+                          target.role === 'mentor'
                           ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                           : 'bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200'
                         }`}
                       >
-                        {target.role === 'admin' ? '권한 회수' : '강사 임명'}
+                        {target.role === 'mentor' ? '권한 회수' : '강사 임명'}
                       </button>
                     )}
                   </td>

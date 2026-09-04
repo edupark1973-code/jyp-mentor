@@ -61,7 +61,7 @@ export default function AdminMentoringPage() {
   }
 
   useEffect(() => {
-    if (role !== 'admin' || !user) return;
+    if (role !== 'mentor' || !user) return;
 
     const qSlots = query(
       collection(db, 'mentoring_slots'), 
@@ -273,7 +273,7 @@ export default function AdminMentoringPage() {
   const filteredSlots = slots.filter(s => s.date === selectedDate);
 
   if (authLoading) return null;
-  if (role !== 'admin') {
+  if (role !== 'mentor') {
     setTimeout(() => router.push('/'), 1000);
     return (
       <div className="h-screen flex items-center justify-center bg-slate-50">

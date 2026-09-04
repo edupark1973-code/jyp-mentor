@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
+import { ensureUserRole } from '@/lib/userRole';
 import { useAuthStore } from '@/store/useAuthStore';
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -25,28 +25,20 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     // 2. 인증 상태 감시
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setLoading(true);
       setUser(user);
-      if (user) {
-        const userRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userRef);
-        
-        if (userDoc.exists()) {
-          setRole(userDoc.data().role as 'admin' | 'user');
+      try {
+        if (user) {
+          setRole(await ensureUserRole(user));
         } else {
-          // If first time login, create user doc with 'user' role
-          const defaultRole = 'user';
-          await setDoc(userRef, {
-            email: user.email,
-            displayName: user.displayName,
-            role: defaultRole,
-            createdAt: new Date().toISOString()
-          });
-          setRole(defaultRole);
+          setRole(null);
         }
-      } else {
+      } catch (error) {
+        console.error('Failed to synchronize the user session:', error);
         setRole(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();

@@ -127,7 +127,7 @@ function HomeContent() {
     return <Board lecture={currentLecture} role={role} onBack={() => { setCurrentLecture(null); router.replace('/'); }} />;
   }
 
-  const displayLectures = role === 'admin' && user && viewMode === 'workspace'
+  const displayLectures = role === 'mentor' && user && viewMode === 'workspace'
     ? lectures.filter(lecture => lecture.instructorUid === user.uid)
     : lectures.filter(lecture => lecture.isPublic !== false); 
 
@@ -139,13 +139,13 @@ function HomeContent() {
             <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[1.5rem] flex items-center justify-center text-white shadow-2xl shadow-blue-500/20"><BookOpen size={32} /></div>
             <div>
               <h1 className="text-4xl font-black tracking-tight text-white italic">EduReport</h1>
-              <p className="text-slate-500 text-xs font-black uppercase tracking-[0.3em] mt-1">{role === 'admin' && user && viewMode === 'workspace' ? `${user.displayName || '강사'}'s Workspace` : 'Public Courses'}</p>
+              <p className="text-slate-500 text-xs font-black uppercase tracking-[0.3em] mt-1">{role === 'mentor' && user && viewMode === 'workspace' ? `${user.displayName || '강사'}'s Workspace` : 'Public Courses'}</p>
             </div>
           </div>
-          {role === 'admin' && <button onClick={() => setIsAddingLecture(true)} className="px-8 py-4 bg-blue-600 text-white rounded-[1.25rem] font-black flex items-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all active:scale-95"><Plus size={20} /> 새 강좌 생성</button>}
+          {role === 'mentor' && <button onClick={() => setIsAddingLecture(true)} className="px-8 py-4 bg-blue-600 text-white rounded-[1.25rem] font-black flex items-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all active:scale-95"><Plus size={20} /> 새 강좌 생성</button>}
         </header>
 
-        {role === 'admin' && user && (
+        {role === 'mentor' && user && (
           <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10 mb-10 w-fit backdrop-blur-sm">
             <button onClick={() => setViewMode('workspace')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${viewMode === 'workspace' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><LayoutGrid size={16} /> 내 작업실</button>
             <button onClick={() => setViewMode('public')} className={`px-6 py-2.5 rounded-xl font-black text-sm transition-all flex items-center gap-2 ${viewMode === 'public' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400 hover:text-white'}`}><Globe size={16} /> 공개 쇼윈도 구경하기</button>
@@ -155,12 +155,12 @@ function HomeContent() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {displayLectures.map((lecture) => (
             <div key={lecture.id} onClick={() => router.push(`/?id=${lecture.id}`)} className="bg-white/5 p-10 rounded-[3.5rem] border border-white/10 shadow-sm hover:shadow-2xl hover:border-blue-500/50 hover:-translate-y-2 transition-all cursor-pointer group relative overflow-hidden backdrop-blur-sm flex flex-col h-[320px]">
-              {role === 'admin' && lecture.instructorUid === user?.uid && (
+              {role === 'mentor' && lecture.instructorUid === user?.uid && (
                 <button onClick={(e) => { e.stopPropagation(); if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'lectures', lecture.id)); }} className="absolute top-8 right-8 p-2 text-slate-600 hover:text-red-500 rounded-xl transition-colors z-10"><Trash2 size={20} /></button>
               )}
               <div className="flex items-center justify-between mb-8">
                 <div className="w-16 h-16 bg-white/5 rounded-[1.5rem] flex items-center justify-center text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner border border-white/5"><LayoutGrid size={32} /></div>
-                {role === 'admin' && <div className={`px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-1.5 uppercase tracking-widest ${lecture.isPublic !== false ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{lecture.isPublic !== false ? <><Globe size={12}/> Public</> : <><Lock size={12}/> Private</>}</div>}
+                {role === 'mentor' && <div className={`px-3 py-1.5 rounded-full text-[10px] font-black flex items-center gap-1.5 uppercase tracking-widest ${lecture.isPublic !== false ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{lecture.isPublic !== false ? <><Globe size={12}/> Public</> : <><Lock size={12}/> Private</>}</div>}
               </div>
               <h3 className="text-3xl font-black mb-4 leading-tight group-hover:text-white transition-colors line-clamp-2 flex-1">{lecture.title}</h3>
               {viewMode === 'public' && <div className="text-slate-400 font-bold text-sm mb-4">👨‍🏫 {lecture.instructor}</div>}
@@ -261,10 +261,10 @@ function Board({ lecture, role, onBack }: any) {
         </div>
         
         <div className="flex items-center gap-3 overflow-x-auto custom-scrollbar pb-1">
-          {role === 'admin' && <button onClick={() => setIsSettingsOpen(true)} className="px-5 py-2.5 bg-slate-800 text-white rounded-2xl font-black text-sm hover:bg-slate-700 transition-all">강좌 설정</button>}
+          {role === 'mentor' && <button onClick={() => setIsSettingsOpen(true)} className="px-5 py-2.5 bg-slate-800 text-white rounded-2xl font-black text-sm hover:bg-slate-700 transition-all">강좌 설정</button>}
           <button onClick={() => { const link = `${window.location.origin}/?id=${lecture.id}`; navigator.clipboard.writeText(link); alert('수강생 초대 링크가 복사되었습니다!'); }} className="px-5 py-2.5 bg-slate-700 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"><LinkIcon size={18} /> 초대 링크 복사</button>
           <button onClick={() => window.open(`/lecture/live?id=${lecture.id}`, '_blank')} className="px-5 py-2.5 bg-indigo-600 text-white rounded-2xl font-black text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-indigo-700 active:scale-95 whitespace-nowrap"><Maximize2 size={18} /> 라이브 모드</button>
-          {role === 'admin' && (
+          {role === 'mentor' && (
             <>
               <button onClick={() => window.open(`/poll/manager?id=${lecture.id}`, '_blank')} className="px-5 py-2.5 bg-purple-600 text-white rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg hover:bg-purple-700 active:scale-95 whitespace-nowrap"><BarChart3 size={18} /> 투표 관리</button>
               <button onClick={() => setIsAddingSection(true)} className="px-5 py-2.5 bg-pink-500 text-white rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg hover:bg-pink-600 active:scale-95 whitespace-nowrap"><Plus size={18} /> 섹션 추가</button>
@@ -368,16 +368,16 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
       lectureId: section.lectureId, sectionId: section.id, title, content,
       linkUrl: linkUrl.trim() || null, fileUrl: fileData?.url || null,
       fileName: fileData?.name || null, fileType: fileData?.type || null,
-      instructor: role === 'admin' ? '강사' : (user?.displayName || '수강생'),
+      instructor: role === 'mentor' ? '강사' : (user?.displayName || '수강생'),
       isPinned: false, order: currentMinOrder - 1, createdAt: serverTimestamp()
     });
     setTitle(''); setContent(''); setLinkUrl(''); setFileData(null); setIsAdding(false); setShowLinkInput(false);
   };
 
-  const canAddCard = role === 'admin' || (lecture.allowStudentPosts && user);
+  const canAddCard = role === 'mentor' || (lecture.allowStudentPosts && user);
 
   async function handleMoveCard(cardId: string, direction: 'up' | 'down') {
-    if (role !== 'admin') return;
+    if (role !== 'mentor') return;
 const currentIndex = cards.findIndex((c: any) => c.id === cardId);
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
     if (targetIndex < 0 || targetIndex >= cards.length) return;
@@ -407,7 +407,7 @@ const currentIndex = cards.findIndex((c: any) => c.id === cardId);
     <div className="w-80 flex-shrink-0 flex flex-col max-h-full">
       <div className="flex justify-between items-center mb-6 px-3">
         <h3 className="text-white font-black text-xl tracking-tight text-slate-200">{section.title}</h3>
-        {role === 'admin' && <button onClick={handleDeleteSection} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button>}
+        {role === 'mentor' && <button onClick={handleDeleteSection} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button>}
       </div>
       <div className="flex-1 overflow-y-auto space-y-5 pr-3 custom-scrollbar text-slate-900 pb-20">
         {canAddCard && !isAdding && (
@@ -497,8 +497,8 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
     setIsCopied(true); setTimeout(() => setIsCopied(false), 2000);
   };
 
-  const togglePin = async () => { if (role !== 'admin') return; await updateDoc(doc(db, 'cards', card.id), { isPinned: !card.isPinned }); };
-  const handleUpdateCard = async () => { if (role !== 'admin') return; await updateDoc(doc(db, 'cards', card.id), { title: editedTitle, content: editedContent, updatedAt: serverTimestamp() }); setIsEditing(false); };
+  const togglePin = async () => { if (role !== 'mentor') return; await updateDoc(doc(db, 'cards', card.id), { isPinned: !card.isPinned }); };
+  const handleUpdateCard = async () => { if (role !== 'mentor') return; await updateDoc(doc(db, 'cards', card.id), { title: editedTitle, content: editedContent, updatedAt: serverTimestamp() }); setIsEditing(false); };
 
   const renderContentWithLinks = (content: string) => {
     if (!content) return null;
@@ -519,7 +519,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
            {card.isPinned && <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Pinned</span>}
          </div>
          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-           {role === 'admin' && (
+           {role === 'mentor' && (
              <div className="flex items-center gap-1 mr-2 border-r pr-2 border-slate-100">
                <button onClick={togglePin} className={`p-1.5 rounded-lg transition-all ${card.isPinned ? 'text-blue-500 bg-blue-50' : 'text-slate-300 hover:bg-slate-50'}`} title="상단 고정"><Pin size={14}/></button>
                <div className="flex flex-col gap-0.5">
@@ -529,8 +529,8 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
              </div>
            )}
            <button onClick={handleCopy} className={`p-2 rounded-xl transition-all ${isCopied ? 'text-green-500' : 'text-slate-200 hover:text-slate-400'}`} title="내용 복사">{isCopied ? <Check size={16}/> : <Copy size={16}/>}</button>
-           {role === 'admin' && (isEditing ? <div className="flex items-center gap-1"><button onClick={handleUpdateCard} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors" title="저장"><Check size={16}/></button><button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors" title="취소"><X size={16}/></button></div> : <button onClick={() => setIsEditing(true)} className="p-2 text-slate-200 hover:text-blue-500 transition-all" title="편집"><Pencil size={16}/></button>)}
-           {role === 'admin' && <button onClick={() => { if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'cards', card.id)) }} className="text-slate-200 hover:text-red-500 transition-all"><Trash2 size={16}/></button>}
+           {role === 'mentor' && (isEditing ? <div className="flex items-center gap-1"><button onClick={handleUpdateCard} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors" title="저장"><Check size={16}/></button><button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors" title="취소"><X size={16}/></button></div> : <button onClick={() => setIsEditing(true)} className="p-2 text-slate-200 hover:text-blue-500 transition-all" title="편집"><Pencil size={16}/></button>)}
+           {role === 'mentor' && <button onClick={() => { if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'cards', card.id)) }} className="text-slate-200 hover:text-red-500 transition-all"><Trash2 size={16}/></button>}
          </div>
       </div>
       

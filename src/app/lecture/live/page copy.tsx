@@ -76,7 +76,7 @@ function LiveContent() {
                   {q.author || 'Anonymous Student'}
                 </div>
               </div>
-              {role === 'admin' && (
+              {role === 'mentor' && (
                 <button onClick={() => handleDelete(q.id)} className="p-4 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-2xl transition-all">
                   <Trash2 size={24} />
                 </button>
