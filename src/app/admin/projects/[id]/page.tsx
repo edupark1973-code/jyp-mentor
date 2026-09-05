@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { collection, deleteField, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Mail, Save } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Mail, Plus, Save, Clock } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { sendMentorFeedbackNotification } from '@/lib/notifications';
 import MarkdownDocument from '@/components/MarkdownDocument';
@@ -28,6 +28,12 @@ interface StepResult {
   aiOutput: string;
 }
 
+interface CommentItem {
+  id: string;
+  content: string;
+  createdAt?: any;
+}
+
 export default function MentorProjectDetailPage() {
   const { id: projectId } = useParams<{ id: string }>();
   const router = useRouter();
@@ -36,7 +42,11 @@ export default function MentorProjectDetailPage() {
   const [mentee, setMentee] = useState<MenteeDetail | null>(null);
   const [steps, setSteps] = useState<StepResult[]>([]);
   const [openSteps, setOpenSteps] = useState<Record<number, boolean>>({});
-  const [mentorComment, setMentorComment] = useState('');
+  
+  // 코멘트 이력 및 새 코멘트 입력 상태
+  const [commentsHistory, setCommentsHistory] = useState<CommentItem[]>([]);
+  const [newComment, setNewComment] = useState('');
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -95,14 +105,26 @@ export default function MentorProjectDetailPage() {
       });
 
       if (!finalPlan && legacyStep7) finalPlan = { ...legacyStep7, stepNumber: 6 };
-      if (!judgeReview && legacyStep6) judgeReview = { ...legacyStep6, stepNumber: 7 };
+      if (!judgeReview && legacyStep6) judgeReview = { ...judgeReview, stepNumber: 7 };
       setSteps([finalPlan, judgeReview].filter((step): step is StepResult => Boolean(step)));
     });
 
     const unsubscribeFeedback = onSnapshot(feedbackRef, (snapshot) => {
       if (!snapshot.exists()) return;
       const data = snapshot.data();
-      setMentorComment(String(data.mentorComment ?? ''));
+      
+      let history: CommentItem[] = [];
+      if (Array.isArray(data.comments)) {
+        history = data.comments;
+      } else if (data.mentorComment) {
+        // 기존 단일 코멘트 데이터 호환
+        history = [{
+          id: 'legacy',
+          content: String(data.mentorComment),
+          createdAt: data.updatedAt || null,
+        }];
+      }
+      setCommentsHistory(history);
     });
 
     return () => {
@@ -117,14 +139,29 @@ export default function MentorProjectDetailPage() {
       setError('프로젝트 또는 멘티 이메일 정보가 없어 저장할 수 없습니다.');
       return;
     }
+
+    if (!newComment.trim()) {
+      setError('새로 추가할 코멘트 내용을 입력해 주세요.');
+      return;
+    }
+
     setSaving(true);
     setError('');
     try {
+      const newCommentObj = {
+        id: Date.now().toString(),
+        content: newComment.trim(),
+        createdAt: new Date().toISOString(),
+      };
+
+      const updatedComments = [newCommentObj, ...commentsHistory];
+
       await setDoc(doc(db, 'mentor_feedbacks', project.id), {
         projectId: project.id,
         stepNumber: project.currentStep,
         mentorId: user.uid,
-        mentorComment: mentorComment.trim(),
+        mentorComment: newComment.trim(), // 최신 코멘트 유지
+        comments: updatedComments, // 누적 코멘트 배열 저장
         businessChecklist: deleteField(),
         resultChecklist: deleteField(),
         updatedAt: serverTimestamp(),
@@ -135,9 +172,11 @@ export default function MentorProjectDetailPage() {
         menteeName: mentee.displayName,
         projectTitle: project.title,
         stepName: '최종 사업계획서 검토',
-        mentorCommentSummary: mentorComment.trim() || '멘토가 프로젝트 피드백을 등록했습니다.',
+        mentorCommentSummary: newComment.trim(),
         projectId: project.id,
       });
+
+      setNewComment(''); // 입력창 초기화
 
       if (!mailResult.success) {
         setError('피드백은 저장됐지만 메일 큐 등록에 실패했습니다. 다시 시도해 주세요.');
@@ -167,7 +206,7 @@ export default function MentorProjectDetailPage() {
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_480px]">
           <main className="space-y-4">
             {steps.map((step) => {
               const isOpen = openSteps[step.stepNumber] ?? true;
@@ -178,11 +217,57 @@ export default function MentorProjectDetailPage() {
           </main>
 
           <aside className="space-y-5 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-2">
-            <section className="sticky bottom-0 rounded-3xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6">
-              <label htmlFor="mentor-comment" className="text-lg font-black text-slate-950">멘토 코멘트</label>
-              <textarea id="mentor-comment" value={mentorComment} onChange={(event) => setMentorComment(event.target.value)} rows={6} placeholder="핵심 개선 방향과 다음 단계 조언을 입력해 주세요." className="mt-4 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl sm:p-6">
+              <h2 className="text-lg font-black text-slate-950 flex items-center gap-2">
+                <Plus size={20} className="text-blue-600" /> 새 멘토 코멘트 추가
+              </h2>
+              <textarea 
+                id="mentor-comment" 
+                value={newComment} 
+                onChange={(event) => setNewComment(event.target.value)} 
+                rows={5} 
+                placeholder="새로운 피드백이나 추가 개선 방향을 입력해 주세요. (줄바꿈 가능)" 
+                className="mt-4 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 font-medium whitespace-pre-wrap" 
+              />
               {error && <p className="mt-3 text-sm font-bold text-red-600">{error}</p>}
-              <button onClick={saveFeedback} disabled={saving || !mentee?.email} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">{saving ? <Loader2 className="animate-spin" size={19} /> : <><Save size={18} /><Mail size={18} /></>} 피드백 저장 및 메일 발송</button>
+              <button 
+                onClick={saveFeedback} 
+                disabled={saving || !mentee?.email || !newComment.trim()} 
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="animate-spin" size={19} /> : <><Save size={18} /><Mail size={18} /></>} 새 코멘트 저장 및 메일 발송
+              </button>
+            </section>
+
+            {/* 이전 코멘트 이력 목록 */}
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <h2 className="text-base font-black text-slate-950 flex items-center gap-2 mb-4">
+                <Clock size={18} className="text-slate-500" /> 코멘트 이력 ({commentsHistory.length})
+              </h2>
+              
+              {commentsHistory.length === 0 ? (
+                <p className="text-xs text-slate-400 font-medium py-4 text-center">등록된 코멘트가 없습니다.</p>
+              ) : (
+                <div className="space-y-3">
+                  {commentsHistory.map((item, index) => (
+                    <div key={item.id || index} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center justify-between text-xs text-slate-400 font-bold mb-2">
+                        <span>멘토 피드백 #{commentsHistory.length - index}</span>
+                        {item.createdAt && (
+                          <span>
+                            {typeof item.createdAt === 'string' 
+                              ? new Date(item.createdAt).toLocaleString('ko-KR')
+                              : item.createdAt?.toDate ? item.createdAt.toDate().toLocaleString('ko-KR') : ''}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm leading-6 text-slate-800 whitespace-pre-wrap font-medium">
+                        {item.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </aside>
         </div>
