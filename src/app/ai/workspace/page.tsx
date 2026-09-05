@@ -35,6 +35,7 @@ import {
   Sparkles,
   EyeOff,
   Upload,
+  ExternalLink,
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { downloadBusinessPlanDocx } from '@/lib/exportBusinessPlanDocx';
@@ -93,6 +94,34 @@ interface AnalyzeDocumentResponse {
   extractedCharacters?: number;
   truncated?: boolean;
   error?: string;
+}
+
+// 텍스트 내 URL을 감지하여 클릭 가능한 링크로 전환해주는 헬퍼 컴포넌트
+function AutoFormattedText({ text }: { text: string }) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {parts.map((part, index) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-bold text-blue-400 underline decoration-blue-400/50 underline-offset-2 hover:text-blue-300 break-all"
+            >
+              {part}
+              <ExternalLink size={12} className="shrink-0" />
+            </a>
+          );
+        }
+        return part;
+      })}
+    </span>
+  );
 }
 
 function buildExportMarkdown({
@@ -313,7 +342,9 @@ function FeedbackAccordion({ feedback }: { feedback: FeedbackData | null }) {
                       </span>
                     )}
                   </div>
-                  <p className="whitespace-pre-wrap">{item.content}</p>
+                  <p className="text-sm leading-6 text-slate-200">
+                    <AutoFormattedText text={item.content} />
+                  </p>
                 </div>
               ))}
             </div>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { collection, deleteField, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
-import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Mail, Plus, Save, Clock } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Mail, Plus, Save, Clock, ExternalLink } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { sendMentorFeedbackNotification } from '@/lib/notifications';
 import MarkdownDocument from '@/components/MarkdownDocument';
@@ -32,6 +32,34 @@ interface CommentItem {
   id: string;
   content: string;
   createdAt?: any;
+}
+
+// 텍스트 내 URL을 감지하여 클릭 가능한 링크로 전환해주는 헬퍼 컴포넌트
+function AutoFormattedText({ text }: { text: string }) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return (
+    <span className="whitespace-pre-wrap">
+      {parts.map((part, index) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-bold text-blue-600 underline decoration-blue-600/50 underline-offset-2 hover:text-blue-800 break-all"
+            >
+              {part}
+              <ExternalLink size={12} className="shrink-0" />
+            </a>
+          );
+        }
+        return part;
+      })}
+    </span>
+  );
 }
 
 export default function MentorProjectDetailPage() {
@@ -230,7 +258,7 @@ export default function MentorProjectDetailPage() {
                 value={newComment} 
                 onChange={(event) => setNewComment(event.target.value)} 
                 rows={5} 
-                placeholder="새로운 피드백이나 추가 개선 방향을 입력해 주세요. (줄바꿈 가능)" 
+                placeholder="새로운 피드백이나 추가 개선 방향을 입력해 주세요. (줄바꿈 및 http 링크 자동 연결 가능)" 
                 className="mt-4 w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100 font-medium whitespace-pre-wrap" 
               />
               {error && <p className="mt-3 text-sm font-bold text-red-600">{error}</p>}
@@ -265,8 +293,8 @@ export default function MentorProjectDetailPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm leading-6 text-slate-800 whitespace-pre-wrap font-medium">
-                        {item.content}
+                      <p className="text-sm leading-6 text-slate-800 font-medium">
+                        <AutoFormattedText text={item.content} />
                       </p>
                     </div>
                   ))}
