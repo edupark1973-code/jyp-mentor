@@ -22,6 +22,7 @@ import {
   ChevronUp,
   Download,
   Eye,
+  FileText,
   FilePlus2,
   Loader2,
   MessageSquareText,
@@ -30,6 +31,7 @@ import {
   Send,
   Sparkles,
   Trash2,
+  Upload,
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { deleteProjectWithRelatedData } from '@/lib/deleteProject';
@@ -54,6 +56,7 @@ interface ProjectData {
   initialIdea: string;
   currentStep: number;
   menteeId: string;
+  sourceDocumentName?: string;
 }
 
 interface StepResult {
@@ -70,6 +73,15 @@ interface FeedbackData {
 interface GenerateResponse {
   success?: boolean;
   aiOutput?: string;
+  error?: string;
+}
+
+interface AnalyzeDocumentResponse {
+  success?: boolean;
+  analysis?: string;
+  fileName?: string;
+  extractedCharacters?: number;
+  truncated?: boolean;
   error?: string;
 }
 
@@ -119,8 +131,13 @@ function buildExportMarkdown({
 function ProjectEntry({ userId }: { userId: string }) {
   const router = useRouter();
   const [projects, setProjects] = useState<ProjectData[]>([]);
+  const [startMode, setStartMode] = useState<'idea' | 'document'>('idea');
   const [title, setTitle] = useState('');
   const [initialIdea, setInitialIdea] = useState('');
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sourceAnalysis, setSourceAnalysis] = useState('');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisNotice, setAnalysisNotice] = useState('');
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState('');
   const [entryError, setEntryError] = useState('');
@@ -136,19 +153,58 @@ function ProjectEntry({ userId }: { userId: string }) {
           initialIdea: String(data.initialIdea ?? ''),
           currentStep: Number(data.currentStep ?? 1),
           menteeId: String(data.menteeId ?? ''),
+          sourceDocumentName: String(data.sourceDocumentName ?? ''),
         };
       }));
     });
   }, [userId]);
 
+  const changeStartMode = (mode: 'idea' | 'document') => {
+    setStartMode(mode);
+    setEntryError('');
+  };
+
+  const analyzeDocument = async () => {
+    if (!sourceFile || !auth.currentUser) return;
+    setAnalyzing(true);
+    setSourceAnalysis('');
+    setAnalysisNotice('');
+    setEntryError('');
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const formData = new FormData();
+      formData.append('file', sourceFile);
+      const response = await fetch('/api/analyze-business-plan', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await response.json() as AnalyzeDocumentResponse;
+      if (!response.ok || !data.success || !data.analysis) throw new Error(data.error || '첨부자료 분석에 실패했습니다.');
+      setSourceAnalysis(data.analysis);
+      setAnalysisNotice(`${data.fileName} · ${Number(data.extractedCharacters ?? 0).toLocaleString()}자 분석${data.truncated ? ' · 긴 문서의 앞부분 10만 자 기준' : ''}`);
+    } catch (analysisError) {
+      setEntryError(analysisError instanceof Error ? analysisError.message : '첨부자료 분석에 실패했습니다.');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const createProject = async () => {
-    if (!title.trim() || !initialIdea.trim()) return;
+    if (!title.trim() || (startMode === 'idea' ? !initialIdea.trim() : !sourceAnalysis.trim())) return;
     setCreating(true);
+    setEntryError('');
     try {
       const projectRef = await addDoc(collection(db, 'projects'), {
         menteeId: userId,
         title: title.trim(),
-        initialIdea: initialIdea.trim(),
+        initialIdea: startMode === 'idea' ? initialIdea.trim() : '기존 사업계획서 첨부자료를 기반으로 시작한 프로젝트',
+        startMode,
+        ...(startMode === 'document' ? {
+          sourceDocumentName: sourceFile?.name ?? '첨부 사업계획서',
+          sourceDocumentAnalysis: sourceAnalysis.trim(),
+          sourceDocumentConfirmedAt: serverTimestamp(),
+        } : {}),
         currentStep: 1,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -175,9 +231,34 @@ function ProjectEntry({ userId }: { userId: string }) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <header className="mb-8"><p className="text-xs font-black uppercase tracking-[0.25em] text-blue-600">AI Business Plan Builder</p><h1 className="mt-2 text-3xl font-black text-slate-950 sm:text-4xl">내 사업계획서 워크스페이스</h1><p className="mt-3 text-slate-500">기존 프로젝트를 이어가거나 새로운 아이디어로 시작하세요.</p></header>
+      <header className="mb-8"><p className="text-xs font-black uppercase tracking-[0.25em] text-blue-600">AI Business Plan Builder</p><h1 className="mt-2 text-3xl font-black text-slate-950 sm:text-4xl">내 사업계획서 워크스페이스</h1><p className="mt-3 text-slate-500">아이디어로 시작하거나 작성 중인 사업계획서를 바탕으로 개선하세요.</p></header>
       <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="flex items-center gap-2 text-xl font-black"><FilePlus2 className="text-blue-600" /> 새 프로젝트</h2><div className="mt-5 space-y-4"><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="사업 아이템 이름" className="w-full rounded-2xl border border-slate-200 px-4 py-3.5 font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /><textarea value={initialIdea} onChange={(event) => setInitialIdea(event.target.value)} rows={7} placeholder="누구의 어떤 문제를 어떻게 해결할 것인지 자유롭게 적어주세요." className="w-full resize-y rounded-2xl border border-slate-200 px-4 py-3.5 leading-7 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" /><button onClick={createProject} disabled={creating || !title.trim() || !initialIdea.trim()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 font-black text-white disabled:opacity-50">{creating ? <Loader2 className="animate-spin" /> : <Sparkles />} 7단계 기획 시작하기</button></div></section>
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="flex items-center gap-2 text-xl font-black"><FilePlus2 className="text-blue-600" /> 새 프로젝트</h2>
+          <div className="mt-5 grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5">
+            <button type="button" onClick={() => changeStartMode('idea')} className={`rounded-xl px-3 py-3 text-sm font-black transition ${startMode === 'idea' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500'}`}><Sparkles className="mx-auto mb-1" size={18} />아이디어로 시작</button>
+            <button type="button" onClick={() => changeStartMode('document')} className={`rounded-xl px-3 py-3 text-sm font-black transition ${startMode === 'document' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}><FileText className="mx-auto mb-1" size={18} />기존 계획서로 시작</button>
+          </div>
+          <div className="mt-4 space-y-4">
+            <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="사업 아이템 이름" className="w-full rounded-2xl border border-slate-200 px-4 py-3.5 font-semibold outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+            {startMode === 'idea' ? (
+              <textarea value={initialIdea} onChange={(event) => setInitialIdea(event.target.value)} rows={7} placeholder="누구의 어떤 문제를 어떻게 해결할 것인지 자유롭게 적어주세요." className="w-full resize-y rounded-2xl border border-slate-200 px-4 py-3.5 leading-7 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+            ) : (
+              <div className="space-y-3">
+                <label className="flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-emerald-200 bg-emerald-50 px-4 py-6 text-center transition hover:border-emerald-400">
+                  <Upload className="text-emerald-700" />
+                  <span className="mt-2 text-sm font-black text-emerald-900">{sourceFile?.name || 'PDF 또는 DOCX 선택'}</span>
+                  <span className="mt-1 text-xs text-emerald-700">10MB 이하 · 스캔 PDF 제외</span>
+                  <input type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="hidden" onChange={(event) => { setSourceFile(event.target.files?.[0] ?? null); setSourceAnalysis(''); setAnalysisNotice(''); }} />
+                </label>
+                <button type="button" onClick={() => void analyzeDocument()} disabled={!sourceFile || analyzing} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white py-3 font-black text-emerald-800 disabled:opacity-40">{analyzing ? <Loader2 className="animate-spin" size={18} /> : <FileText size={18} />}{analyzing ? '첨부자료 분석 중' : '첨부자료 분석하기'}</button>
+                {sourceAnalysis && <div className="rounded-2xl border border-emerald-200 bg-white p-4"><div className="mb-2 flex items-center gap-2 text-xs font-bold text-emerald-700"><Check size={15} />{analysisNotice}</div><p className="mb-2 text-xs text-slate-500">분석 결과를 확인하고 잘못된 내용이나 오래된 수치를 직접 수정해 주세요.</p><textarea value={sourceAnalysis} onChange={(event) => setSourceAnalysis(event.target.value)} rows={12} className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs leading-6 outline-none focus:border-emerald-500" /></div>}
+              </div>
+            )}
+            {entryError && <p className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{entryError}</p>}
+            <button onClick={createProject} disabled={creating || analyzing || !title.trim() || (startMode === 'idea' ? !initialIdea.trim() : !sourceAnalysis.trim())} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 font-black text-white disabled:opacity-50">{creating ? <Loader2 className="animate-spin" /> : <Sparkles />} 확인 후 7단계 기획 시작하기</button>
+          </div>
+        </section>
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-black">진행 중인 프로젝트</h2>{entryError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{entryError}</p>}<div className="mt-5 space-y-3">{projects.map((project) => <div key={project.id} className="flex items-center rounded-2xl border border-slate-100 bg-slate-50 transition hover:border-blue-200 hover:bg-blue-50"><Link href={`/ai/workspace?projectId=${project.id}`} className="flex min-w-0 flex-1 items-center justify-between p-4"><div className="min-w-0"><p className="truncate font-black text-slate-900">{project.title}</p><p className="mt-1 line-clamp-1 text-xs text-slate-500">{project.initialIdea}</p></div><div className="ml-4 flex shrink-0 items-center gap-2"><span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-700">STEP {project.currentStep}</span><ChevronRight size={18} /></div></Link><button type="button" onClick={() => void deleteProject(project)} disabled={Boolean(deletingId)} aria-label={`${project.title} 프로젝트 삭제`} className="mr-3 rounded-xl p-2.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}</button></div>)}{projects.length === 0 && <p className="py-16 text-center font-bold text-slate-400">아직 프로젝트가 없습니다.</p>}</div></section>
       </div>
     </div>
@@ -234,7 +315,7 @@ function WorkspaceContent() {
       if (!snapshot.exists()) { setError('프로젝트를 찾을 수 없습니다.'); setLoading(false); return; }
       const data = snapshot.data();
       if (String(data.menteeId ?? '') !== user.uid) { setError('이 프로젝트에 접근할 권한이 없습니다.'); setLoading(false); return; }
-      const nextProject = { id: snapshot.id, title: String(data.title ?? '제목 없는 프로젝트'), initialIdea: String(data.initialIdea ?? ''), currentStep: Number(data.currentStep ?? 1), menteeId: String(data.menteeId ?? '') };
+      const nextProject: ProjectData = { id: snapshot.id, title: String(data.title ?? '제목 없는 프로젝트'), initialIdea: String(data.initialIdea ?? ''), currentStep: Number(data.currentStep ?? 1), menteeId: String(data.menteeId ?? ''), sourceDocumentName: String(data.sourceDocumentName ?? '') };
       setProject(nextProject);
       if (!initializedRef.current) {
         const initialStep = Math.min(7, Math.max(1, nextProject.currentStep));
@@ -429,7 +510,7 @@ function WorkspaceContent() {
   return (
     <div className="min-h-screen bg-slate-100 px-3 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1680px]">
-        <header className="mb-5 rounded-3xl bg-slate-950 p-5 text-white sm:p-7"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><Link href="/ai/workspace" className="text-xs font-black uppercase tracking-[0.2em] text-blue-400">AI Business Plan Builder</Link><h1 className="mt-2 text-2xl font-black sm:text-3xl">{project.title}</h1><p className="mt-2 text-sm text-slate-400">AI의 자동생성 초안을 그대로 다음 단계로 넘기거나, 직접 수정내용을 넣어 다음 단계로 넘길 수 있습니다.</p></div><span className="w-fit rounded-full bg-blue-600 px-4 py-2 text-sm font-black">STEP {activeStep} / 7</span></div></header>
+        <header className="mb-5 rounded-3xl bg-slate-950 p-5 text-white sm:p-7"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><Link href="/ai/workspace" className="text-xs font-black uppercase tracking-[0.2em] text-blue-400">AI Business Plan Builder</Link><h1 className="mt-2 text-2xl font-black sm:text-3xl">{project.title}</h1><p className="mt-2 text-sm text-slate-400">AI의 자동생성 초안을 그대로 다음 단계로 넘기거나, 직접 수정내용을 넣어 다음 단계로 넘길 수 있습니다.</p>{project.sourceDocumentName && <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-900/60 px-3 py-1.5 text-xs font-bold text-emerald-200"><FileText size={14} />참고자료: {project.sourceDocumentName}</p>}</div><span className="w-fit rounded-full bg-blue-600 px-4 py-2 text-sm font-black">STEP {activeStep} / 7</span></div></header>
 
         <nav className="mb-5 overflow-x-auto rounded-3xl border border-slate-200 bg-white p-3 shadow-sm"><div className="flex min-w-max gap-2 lg:grid lg:min-w-0 lg:grid-cols-7">{STEPS.map((step) => { const complete = Boolean(results[step.number]?.aiOutput); const active = step.number === activeStep; const disabled = step.number > maxAccessibleStep; return <button key={step.number} disabled={disabled} onClick={() => selectStep(step.number)} className={`min-w-36 rounded-2xl p-3 text-left transition lg:min-w-0 ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : complete ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-50 text-slate-500'} disabled:cursor-not-allowed disabled:opacity-40`}><div className="flex items-center justify-between"><span className="text-xs font-black">STEP {step.number}</span>{complete && <Check size={15} />}</div><p className="mt-1 text-sm font-black">{step.name}</p></button>; })}</div></nav>
 

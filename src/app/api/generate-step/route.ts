@@ -183,11 +183,23 @@ function getBearerToken(request: Request) {
   return authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
 }
 
-function buildAccumulatedContext(projectTitle: string, initialIdea: string, steps: StoredStepResult[], mentorFeedback?: Record<string, unknown>) {
+function getSourceDocumentContext(analysis: string, currentStep: number) {
+  if (!analysis || currentStep === 7) return '';
+  if (currentStep === 6) return analysis;
+  const section = (title: string) => analysis.match(new RegExp(`## ${title}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`))?.[1]?.trim() ?? '';
+  const selected = [section('공통 핵심 사실'), section(`Step ${currentStep} 참고자료`)].filter(Boolean).join('\n\n');
+  return selected || analysis.slice(0, 20_000);
+}
+
+function buildAccumulatedContext(projectTitle: string, initialIdea: string, sourceDocumentAnalysis: string, currentStep: number, steps: StoredStepResult[], mentorFeedback?: Record<string, unknown>) {
   const sections = [
     `[프로젝트명]\n${projectTitle || '프로젝트명 미입력'}`,
     `[초기 비즈니스 아이디어]\n${initialIdea || '초기 아이디어 미입력'}`,
   ];
+  const sourceContext = getSourceDocumentContext(sourceDocumentAnalysis, currentStep);
+  if (sourceContext) {
+    sections.push(`[멘티가 확인한 기존 사업계획서 참고자료 - 원문 사실 우선, AI 제안은 제안으로만 취급]\n${sourceContext}`);
+  }
   for (const step of steps) {
     sections.push(`[Step ${step.stepNumber} 확정 결과 - 창업가 편집본 우선]\n${step.aiOutput}`);
   }
@@ -289,6 +301,8 @@ export async function POST(request: Request) {
     const accumulatedContext = buildAccumulatedContext(
       String(projectData.title ?? ''),
       String(projectData.initialIdea ?? ''),
+      String(projectData.sourceDocumentAnalysis ?? ''),
+      currentStep,
       previousSteps,
       mentorFeedback,
     );

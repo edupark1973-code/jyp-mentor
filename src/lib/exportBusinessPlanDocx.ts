@@ -9,12 +9,16 @@ import {
   ShadingType,
   Table,
   TableCell,
+  TableLayoutType,
   TableRow,
   TextRun,
   WidthType,
 } from 'docx';
 
 const FONT = 'Malgun Gothic';
+// A4(11,906 twip)에서 좌우 여백 1,134 twip을 제외한 실제 본문 폭입니다.
+// 한컴오피스는 OOXML의 백분율 표 너비를 다르게 해석할 수 있어 DXA 고정값을 사용합니다.
+const PAGE_CONTENT_WIDTH = 9638;
 
 function splitTableRow(line: string) {
   const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
@@ -65,8 +69,9 @@ function inlineRuns(value: string, options: { bold?: boolean; color?: string } =
   return runs.length > 0 ? runs : [new TextRun({ text: '', font: FONT, ...options })];
 }
 
-function tableCell(text: string, header: boolean) {
+function tableCell(text: string, header: boolean, width: number) {
   return new TableCell({
+    width: { size: width, type: WidthType.DXA },
     shading: header ? { type: ShadingType.CLEAR, fill: 'E2E8F0' } : undefined,
     margins: { top: 100, bottom: 100, left: 120, right: 120 },
     children: [new Paragraph({
@@ -85,17 +90,31 @@ function markdownChildren(markdown: string) {
     const nextLine = lines[index + 1] ?? '';
 
     if (line.includes('|') && isTableDivider(nextLine)) {
+      const headerCells = splitTableRow(line);
+      const columnCount = headerCells.length;
+      const columnWidth = Math.floor(PAGE_CONTENT_WIDTH / columnCount);
+      const columnWidths = Array.from({ length: columnCount }, (_, columnIndex) => (
+        columnIndex === columnCount - 1
+          ? PAGE_CONTENT_WIDTH - (columnWidth * (columnCount - 1))
+          : columnWidth
+      ));
       const rows = [new TableRow({
         tableHeader: true,
-        children: splitTableRow(line).map((cell) => tableCell(cell, true)),
+        children: headerCells.map((cell, columnIndex) => tableCell(cell, true, columnWidths[columnIndex])),
       })];
       index += 2;
       while (index < lines.length && lines[index].trim() && lines[index].includes('|')) {
-        rows.push(new TableRow({ children: splitTableRow(lines[index]).map((cell) => tableCell(cell, false)) }));
+        const cells = splitTableRow(lines[index]);
+        const normalizedCells = Array.from({ length: columnCount }, (_, columnIndex) => cells[columnIndex] ?? '');
+        rows.push(new TableRow({
+          children: normalizedCells.map((cell, columnIndex) => tableCell(cell, false, columnWidths[columnIndex])),
+        }));
         index += 1;
       }
       children.push(new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
+        width: { size: PAGE_CONTENT_WIDTH, type: WidthType.DXA },
+        columnWidths,
+        layout: TableLayoutType.FIXED,
         borders: {
           top: { style: BorderStyle.SINGLE, size: 4, color: '94A3B8' },
           bottom: { style: BorderStyle.SINGLE, size: 4, color: '94A3B8' },
