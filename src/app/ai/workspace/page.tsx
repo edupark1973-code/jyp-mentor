@@ -528,7 +528,7 @@ function WorkspaceContent() {
             <FeedbackAccordion feedback={feedback} />
             
             <a 
-              href="http://pf.kakao.com/_YOUR_CHANNEL_ID/chat" 
+              href="http://pf.kakao.com/_zHzgn/chat" 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex items-center justify-between rounded-3xl bg-[#FEE500] p-5 text-[#371D1E] shadow-sm transition hover:bg-[#FDD800]"
