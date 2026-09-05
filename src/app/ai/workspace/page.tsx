@@ -20,7 +20,6 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Copy,
   Download,
   Eye,
   FilePlus2,
@@ -28,11 +27,14 @@ import {
   MessageSquareText,
   PencilLine,
   Save,
+  Send,
   Sparkles,
   Trash2,
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { deleteProjectWithRelatedData } from '@/lib/deleteProject';
+import { downloadBusinessPlanDocx } from '@/lib/exportBusinessPlanDocx';
+import { sendBusinessPlanReviewNotification } from '@/lib/notifications';
 import MarkdownDocument from '@/components/MarkdownDocument';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -112,22 +114,6 @@ function buildExportMarkdown({
   lines.push('', '---', '', '_본 문서는 JYP Mentor AI 사업계획서 워크스페이스에서 생성되었습니다._', '');
 
   return lines.join('\n');
-}
-
-async function copyToClipboard(text: string) {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
-  }
-  const textArea = document.createElement('textarea');
-  textArea.value = text;
-  textArea.style.position = 'fixed';
-  textArea.style.opacity = '0';
-  document.body.appendChild(textArea);
-  textArea.select();
-  const copied = document.execCommand('copy');
-  textArea.remove();
-  if (!copied) throw new Error('클립보드 복사를 지원하지 않는 브라우저입니다.');
 }
 
 function ProjectEntry({ userId }: { userId: string }) {
@@ -228,7 +214,8 @@ function WorkspaceContent() {
   const [resultsLoaded, setResultsLoaded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [sendingToMentor, setSendingToMentor] = useState(false);
+  const [sentToMentor, setSentToMentor] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -384,42 +371,50 @@ function WorkspaceContent() {
     activeDraft: draft,
   }) : '';
 
-  const downloadBusinessPlan = () => {
+  const downloadBusinessPlan = async () => {
     if (!project) return;
-    const markdown = getExportMarkdown().replace(/\n/g, '\r\n');
-    
-    // Word 호환을 위한 간단한 HTML 래퍼 생성
-    const htmlContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <title>${project.title}</title>
-      </head>
-      <body>
-        <pre style="font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; white-space: pre-wrap; word-wrap: break-word;">${markdown}</pre>
-      </body>
-      </html>
-    `;
-
-    const blob = new Blob([`\uFEFF${htmlContent}`], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    const safeTitle = project.title.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim() || '사업계획서';
-    anchor.href = url;
-    anchor.download = `${safeTitle}_7단계_사업계획서.doc`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    await downloadBusinessPlanDocx(getExportMarkdown(), project.title);
   };
 
-  const copyBusinessPlan = async () => {
+  const sendToMentor = async () => {
+    if (!project || !user) return;
+    const finalPlan = activeStep === 6 ? draft.trim() : results[6]?.aiOutput.trim();
+    if (!finalPlan) {
+      setError('멘토에게 보낼 최종 사업계획서가 없습니다. Step 6 내용을 먼저 완성해 주세요.');
+      return;
+    }
+
+    setSendingToMentor(true);
+    setSentToMentor(false);
+    setError('');
     try {
-      await copyToClipboard(getExportMarkdown());
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch (copyError) {
-      setError(copyError instanceof Error ? copyError.message : '전체 복사에 실패했습니다.');
+      if (activeStep === 6 && finalPlan !== (results[6]?.aiOutput.trim() ?? '')) {
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'step_results', `${project.id}_step_6`), {
+          projectId: project.id,
+          stepNumber: 6,
+          userInput: '',
+          qaAnswers: [],
+          aiOutput: finalPlan,
+          workflowVersion: 2,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+        batch.update(doc(db, 'projects', project.id), { updatedAt: serverTimestamp() });
+        await batch.commit();
+      }
+
+      const result = await sendBusinessPlanReviewNotification({
+        menteeName: user.displayName?.trim() || user.email?.trim() || '멘티',
+        projectTitle: project.title,
+        projectId: project.id,
+      });
+      if (!result.success) throw result.error;
+      setSentToMentor(true);
+    } catch (sendError) {
+      console.error('멘토 검토 요청 실패:', sendError);
+      setError('멘토에게 검토 요청을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setSendingToMentor(false);
     }
   };
 
@@ -445,7 +440,7 @@ function WorkspaceContent() {
             {error && <div className="flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700 sm:flex-row sm:items-center"><div className="flex flex-1 gap-3"><AlertCircle className="shrink-0" size={19} />{error}</div>{!draft.trim() && !generating && <button onClick={() => { attemptedStepsRef.current.delete(activeStep); void generateStep(activeStep); }} className="rounded-xl border border-red-300 bg-white px-4 py-2 text-xs font-black hover:bg-red-100">자동 생성 다시 시도</button>}</div>}
             {!draft.trim() && !generating && !error && <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5 text-center"><p className="font-bold text-blue-950">이 단계는 아직 생성되지 않았습니다.</p><button type="button" onClick={() => { attemptedStepsRef.current.delete(activeStep); void generateStep(activeStep); }} className="mt-3 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white hover:bg-blue-700">{activeStep === 7 ? '심사위원 검증 생성' : '이 단계 AI 초안 생성'}</button></div>}
             {activeStep < 7 && draft.trim() ? <div className="rounded-3xl bg-white p-4 shadow-sm"><button onClick={saveAndContinue} disabled={saving || generating} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-50">{saving || generating ? <Loader2 className="animate-spin" /> : <Save />} {saving ? '저장 후 다음 단계 AI 생성 중' : activeStep === 6 ? '최종안 확정 후 심사위원 검증' : 'AI 적용 후 다음 단계로 이동'}</button></div> : activeStep === 7 && draft.trim() ? <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center"><p className="font-black text-amber-900">사업계획서 작성 및 심사위원 검증이 완료되었습니다.</p><p className="mt-1 text-sm text-amber-700">위 검증 내용은 제출 전 보완 여부를 판단하기 위한 참고 자료입니다.</p></div> : null}
-            {activeStep >= 6 && (draft.trim() || results[6]?.aiOutput) && <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-emerald-700">Export Business Plan</p><h2 className="mt-1 text-xl font-black text-slate-950">사업계획서 결과물 내보내기</h2><p className="mt-2 text-sm text-slate-600">Step 6 최종 사업계획서를 본문으로, Step 7 심사 결과를 참고 부록으로 정리합니다.</p></div><div className="flex flex-col gap-2 sm:flex-row"><button onClick={downloadBusinessPlan} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3.5 text-sm font-black text-white transition hover:bg-emerald-800"><Download size={18} /> 사업계획서 파일 다운로드</button><button onClick={copyBusinessPlan} className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-5 py-3.5 text-sm font-black text-emerald-800 transition hover:bg-emerald-100">{copied ? <Check size={18} /> : <Copy size={18} />} {copied ? '복사 완료' : '전체 복사하기'}</button></div></div></section>}
+            {activeStep >= 6 && (draft.trim() || results[6]?.aiOutput) && <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-emerald-700">Export Business Plan</p><h2 className="mt-1 text-xl font-black text-slate-950">사업계획서 결과물 내보내기</h2><p className="mt-2 text-sm text-slate-600">Step 6 최종 사업계획서를 본문으로, Step 7 심사 결과를 참고 부록으로 정리합니다.</p></div><div className="flex flex-col gap-2 sm:flex-row"><button onClick={downloadBusinessPlan} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3.5 text-sm font-black text-white transition hover:bg-emerald-800"><Download size={18} /> 사업계획서 파일 다운로드</button><button onClick={() => void sendToMentor()} disabled={sendingToMentor || sentToMentor} className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-5 py-3.5 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">{sendingToMentor ? <Loader2 className="animate-spin" size={18} /> : sentToMentor ? <Check size={18} /> : <Send size={18} />} {sendingToMentor ? '보내는 중' : sentToMentor ? '멘토에게 전송 완료' : '멘토에게 보내기'}</button></div></div></section>}
           </main>
           <aside className="space-y-5 xl:sticky xl:top-24 xl:self-start"><FeedbackAccordion feedback={feedback} /><section className="rounded-3xl bg-slate-950 p-5 text-white"><Sparkles className="text-blue-400" /><h2 className="mt-3 font-black">자동 체이닝 작동 중</h2><p className="mt-2 text-xs leading-6 text-slate-400">Step 6에서 편집·확정한 최종 사업계획서를 기준으로 Step 7의 읽기 전용 심사 참고 보고서가 자동 생성됩니다.</p></section></aside>
         </div>

@@ -1,5 +1,6 @@
 import { doc, getDoc, collection, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { DESIGNATED_MENTOR_EMAIL } from '@/lib/userRole';
 
 /**
  * 1. [강사 알림] 멘토링 예약 신청 시 강사에게 알림 발송 (디스코드 우선, 없으면 이메일)
@@ -164,6 +165,67 @@ export async function sendMentorFeedbackNotification({
     return { success: true as const };
   } catch (error) {
     console.error('멘토 피드백 메일 발송 큐 등록 실패:', error);
+    return { success: false as const, error };
+  }
+}
+
+export interface BusinessPlanReviewNotificationParams {
+  menteeName: string;
+  projectTitle: string;
+  projectId: string;
+}
+
+/** 멘티가 최종 사업계획서 검토를 요청하면 담당 멘토에게 알림 메일을 보냅니다. */
+export async function sendBusinessPlanReviewNotification({
+  menteeName,
+  projectTitle,
+  projectId,
+}: BusinessPlanReviewNotificationParams) {
+  try {
+    const safeMenteeName = escapeHtml(menteeName);
+    const safeProjectTitle = escapeHtml(projectTitle);
+    const reviewUrl = `https://jyp-mentor.web.app/admin/projects/${encodeURIComponent(projectId)}`;
+    const emailHtml = `
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="margin:0;padding:20px;background:#f4f6f8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#334155;">
+      <div style="max-width:600px;margin:0 auto;overflow:hidden;border:1px solid #e1e8ed;border-radius:12px;background:#ffffff;">
+        <div style="padding:30px;background:#047857;text-align:center;color:#ffffff;">
+          <h1 style="margin:0;font-size:20px;color:#ffffff;">📄 사업계획서 검토 요청</h1>
+        </div>
+        <div style="padding:40px 30px;line-height:1.6;">
+          <p style="margin-top:0;font-weight:bold;color:#1e293b;">${safeMenteeName} 멘티가 사업계획서 작성을 완료했습니다.</p>
+          <p>아래 사업계획서를 검토하고 멘토 코멘트를 등록해 주세요.</p>
+          <div style="margin:25px 0;padding:20px;border-left:4px solid #10b981;border-radius:4px;background:#f8fafc;">
+            <strong style="color:#1e293b;">사업 아이템</strong><br>
+            <span>${safeProjectTitle}</span>
+          </div>
+          <div style="margin-top:35px;text-align:center;">
+            <a href="${reviewUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 28px;border-radius:8px;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;">사업계획서 검토하기</a>
+          </div>
+        </div>
+        <div style="padding:20px;background:#f1f5f9;text-align:center;font-size:12px;color:#64748b;">
+          본 메일은 JYP 창업 멘토링 올인원 플랫폼에서 자동 발송되었습니다.
+        </div>
+      </div>
+    </body>
+    </html>`;
+
+    await addDoc(collection(db, 'mail'), {
+      to: DESIGNATED_MENTOR_EMAIL,
+      message: {
+        subject: `[JYP 멘토링] 📄 '${projectTitle}' 사업계획서 검토 요청`,
+        html: emailHtml,
+      },
+    });
+
+    return { success: true as const };
+  } catch (error) {
+    console.error('사업계획서 검토 요청 메일 등록 실패:', error);
     return { success: false as const, error };
   }
 }
