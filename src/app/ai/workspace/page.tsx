@@ -66,9 +66,16 @@ interface StepResult {
   aiOutput: string;
 }
 
+interface CommentItem {
+  id: string;
+  content: string;
+  createdAt?: any;
+}
+
 interface FeedbackData {
   mentorComment?: string;
   stepNumber?: number;
+  comments?: CommentItem[];
 }
 
 interface GenerateResponse {
@@ -123,7 +130,11 @@ function buildExportMarkdown({
     lines.push(`## Step ${step.number}. ${step.name}`, '', `> 전문가: ${step.persona}`, '', output || '_아직 생성하거나 저장한 초안이 없습니다._', '', '---', '');
   }
 
-  lines.push('## 멘토 피드백', '', feedback?.mentorComment?.trim() || '_아직 등록된 멘토 코멘트가 없습니다._');
+  const commentsText = feedback?.comments && feedback.comments.length > 0
+    ? feedback.comments.map((c, i) => `### 코멘트 #${feedback.comments!.length - i}\n${c.content}`).join('\n\n')
+    : feedback?.mentorComment?.trim() || '_아직 등록된 멘토 코멘트가 없습니다._';
+
+  lines.push('## 멘토 피드백', '', commentsText);
   lines.push('', '---', '', '_본 문서는 JYP Mentor AI 사업계획서 워크스페이스에서 생성되었습니다._', '');
 
   return lines.join('\n');
@@ -269,10 +280,43 @@ function ProjectEntry({ userId }: { userId: string }) {
 function FeedbackAccordion({ feedback }: { feedback: FeedbackData | null }) {
   const [open, setOpen] = useState(true);
 
+  const commentsList: CommentItem[] = feedback?.comments && feedback.comments.length > 0
+    ? feedback.comments
+    : feedback?.mentorComment
+    ? [{ id: 'legacy', content: feedback.mentorComment }]
+    : [];
+
   return (
     <section className="overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm">
       <button onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between bg-amber-50 p-5 text-left"><div><p className="text-xs font-black uppercase tracking-wider text-amber-700">Mentor Feedback</p><h2 className="mt-1 font-black text-slate-950">실시간 멘토 코멘트</h2></div>{open ? <ChevronUp /> : <ChevronDown />}</button>
-      {open && <div className="p-5"><div className="rounded-2xl bg-slate-950 p-4 text-sm leading-6 text-slate-200"><MessageSquareText className="mb-2 text-amber-400" size={20} />{feedback?.mentorComment || '아직 등록된 멘토 코멘트가 없습니다.'}</div></div>}
+      {open && (
+        <div className="p-5">
+          {commentsList.length === 0 ? (
+            <div className="rounded-2xl bg-slate-950 p-4 text-sm leading-6 text-slate-200">
+              <MessageSquareText className="mb-2 text-amber-400" size={20} />
+              아직 등록된 멘토 코멘트가 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {commentsList.map((item, index) => (
+                <div key={item.id || index} className="rounded-2xl bg-slate-950 p-4 text-sm leading-6 text-slate-200">
+                  <div className="mb-2 flex items-center justify-between text-xs text-amber-400 font-bold">
+                    <span className="flex items-center gap-1.5"><MessageSquareText size={16} /> 멘토 코멘트 #{commentsList.length - index}</span>
+                    {item.createdAt && (
+                      <span className="text-slate-400 font-medium">
+                        {typeof item.createdAt === 'string'
+                          ? new Date(item.createdAt).toLocaleString('ko-KR')
+                          : item.createdAt?.toDate ? item.createdAt.toDate().toLocaleString('ko-KR') : ''}
+                      </span>
+                    )}
+                  </div>
+                  <p className="whitespace-pre-wrap">{item.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
