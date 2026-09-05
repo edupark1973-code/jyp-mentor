@@ -104,8 +104,12 @@ export default function MentorProjectDetailPage() {
         else legacyStep7 = result;
       });
 
-      if (!finalPlan && legacyStep7) finalPlan = { ...legacyStep7, stepNumber: 6 };
-      if (!judgeReview && legacyStep6) judgeReview = { ...judgeReview, stepNumber: 7 };
+      if (!finalPlan && legacyStep7) {
+        finalPlan = { id: legacyStep7.id, aiOutput: legacyStep7.aiOutput, stepNumber: 6 };
+      }
+      if (!judgeReview && legacyStep6) {
+        judgeReview = { id: legacyStep6.id, aiOutput: legacyStep6.aiOutput, stepNumber: 7 };
+      }
       setSteps([finalPlan, judgeReview].filter((step): step is StepResult => Boolean(step)));
     });
 
