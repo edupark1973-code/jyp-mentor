@@ -21,6 +21,21 @@ interface Slot {
   instructorName?: string;
 }
 
+const getTodayString = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getCurrentTimeString = () => {
+  const d = new Date();
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
 function MentoringContent() {
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -37,28 +52,25 @@ function MentoringContent() {
 
   const { user, loading: authLoading, role } = useAuthStore();
 
-  // 1. 예약 가능한 슬롯 실시간 감시 (🌟 과거 시간 필터링 추가됨!)
+  // 1. 예약 가능한 슬롯 실시간 감시 (오늘 및 미래 일정만 조회)
   useEffect(() => {
+    const todayStr = getTodayString();
     const q = query(
       collection(db, 'mentoring_slots'), 
       where('isBooked', '==', false), 
+      where('date', '>=', todayStr),
       orderBy('date'), 
       orderBy('time')
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedSlots = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Slot[];
-
-      // 🌟 [핵심 로직] 현재 시간 기준으로 과거 슬롯 싹 걸러내기
-      const now = new Date();
-      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-      const currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-      const validSlots = fetchedSlots.filter(slot => {
-        if (slot.date > todayStr) return true; // 내일 이후 일정은 무조건 통과
-        if (slot.date === todayStr && slot.time >= currentTimeStr) return true; // 오늘 일정은 '현재 시간 이후'만 통과
-        return false; // 그 외(과거)는 싹둑!
+      const today = getTodayString();
+      const currentTime = getCurrentTimeString();
+      const allSlots = snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Slot[];
+      const validSlots = allSlots.filter(s => {
+        if (s.date < today) return false;
+        if (s.date === today && s.time < currentTime) return false;
+        return true;
       });
-
       setSlots(validSlots);
     });
     return () => unsubscribe();
@@ -299,7 +311,7 @@ function MentoringContent() {
                               isAvailable ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'text-slate-300 cursor-not-allowed'
                             }`}
                           >
-                            {new Date(dateStr).getDate()}
+                            {parseInt(dateStr.split('-')[2], 10)}
                           </button>
                         );
                       })}

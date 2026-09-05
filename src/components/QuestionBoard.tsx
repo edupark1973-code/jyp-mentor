@@ -66,7 +66,7 @@ export default function QuestionBoard({ lectureId, isLiveMode = false }: { lectu
   };
 
   const moveOrder = async (index: number, direction: 'up' | 'down') => {
-    if (role !== 'admin') return;
+    if (role !== 'mentor') return;
     
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= questions.length) return;
@@ -88,7 +88,7 @@ export default function QuestionBoard({ lectureId, isLiveMode = false }: { lectu
   };
 
   const togglePin = async (id: string, currentPin: boolean) => {
-    if (role !== 'admin') return;
+    if (role !== 'mentor') return;
     await updateDoc(doc(db, 'questions', id), { isPinned: !currentPin });
   };
 
@@ -153,7 +153,7 @@ export default function QuestionBoard({ lectureId, isLiveMode = false }: { lectu
                 {q.content}
               </p>
 
-              {(role === 'admin') && (
+              {(role === 'mentor') && (
                 <div className="flex justify-end items-center gap-2 mt-4 pt-3 border-t border-slate-100/50">
                   <div className="flex gap-1 mr-auto">
                     <button 

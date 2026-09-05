@@ -1,16 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isDesignatedMentor() {
+      return isSignedIn() && request.auth.token.email == 'edupark1973@gmail.com';
+    }
+
+    function isMentor() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'mentor';
+    }
+
+    function hasValidRole() {
+      return request.resource.data.role in ['mentor', 'mentee'];
+    }
     
     // 1. [수정] 사용자 규칙: 알림 발송을 위해 이메일 정보 읽기는 로그인한 사용자에게 허용
     match /users/{userId} {
       // 읽기: 로그인한 사용자는 강사의 이메일을 알아야 알림을 보낼 수 있으므로 허용
-      allow read: if request.auth != null;
-      // 쓰기: 본인 또는 어드민만 가능 (기존 유지)
-      allow write: if request.auth != null && (
-        request.auth.uid == userId || 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.uid == request.auth.uid && hasValidRole() &&
+        request.resource.data.role == (isDesignatedMentor() ? 'mentor' : 'mentee');
+      allow update: if hasValidRole() && (
+        isMentor() ||
+        (request.auth.uid == userId && request.resource.data.uid == request.auth.uid && (
+          request.resource.data.role == resource.data.get('role', '') ||
+          (request.resource.data.role == 'mentee' &&
+            !(resource.data.get('role', '') in ['mentor', 'mentee'])) ||
+          (isDesignatedMentor() && request.resource.data.role == 'mentor')
+        ))
       );
+      allow delete: if isMentor();
     }
     
     // 2. [추가] 메일 발송 규칙: Trigger Email 익스텐션이 감시하는 컬렉션
@@ -23,18 +47,18 @@ service cloud.firestore {
     
     match /sections/{sectionId} {
       allow read: if true;
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if isMentor();
     }
     
     match /cards/{cardId} {
       allow read: if true;
-      allow write: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow write: if isMentor();
     }
     
     match /comments/{commentId} {
       allow read: if true;
       allow create: if true; // 익명 댓글 허용
-      allow delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow delete: if isMentor();
     }
     
     match /votes/{voteId} {
@@ -49,15 +73,56 @@ service cloud.firestore {
     
     match /mentoring_slots/{slotId} {
       allow read: if true;
-      allow create, delete: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      allow create, delete: if isMentor();
       allow update: if request.auth != null; 
     }
     
     match /bookings/{bookingId} {
       allow create: if request.auth != null;
-      allow read: if request.auth != null && (resource.data.menteeId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
-      allow update: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
-      allow delete: if request.auth != null && (resource.data.menteeId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow read: if isSignedIn() && (resource.data.menteeId == request.auth.uid || isMentor());
+      allow update: if isMentor();
+      allow delete: if isSignedIn() && (resource.data.menteeId == request.auth.uid || isMentor());
+    }
+
+    match /projects/{projectId} {
+      allow read: if isSignedIn() && (resource.data.menteeId == request.auth.uid || isMentor());
+      allow create: if isSignedIn() && request.resource.data.menteeId == request.auth.uid;
+      allow update: if isSignedIn() && (
+        (resource.data.menteeId == request.auth.uid &&
+          request.resource.data.get('hiddenForMentor', false) == resource.data.get('hiddenForMentor', false)) ||
+        (isMentor() &&
+          request.resource.data.get('hiddenForMentee', false) == resource.data.get('hiddenForMentee', false))
+      );
+      allow delete: if isSignedIn() && (resource.data.menteeId == request.auth.uid || isMentor());
+    }
+
+    match /step_results/{resultId} {
+      allow read: if isSignedIn() && (
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.menteeId == request.auth.uid ||
+        isMentor()
+      );
+      allow create: if isSignedIn() &&
+        get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.menteeId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.menteeId == request.auth.uid ||
+        isMentor()
+      );
+    }
+
+    match /mentor_feedbacks/{feedbackId} {
+      // 새 프로젝트에는 아직 피드백 문서가 없을 수 있으므로 빈 문서 조회를 허용한다.
+      allow get: if isSignedIn() && (
+        !exists(/databases/$(database)/documents/mentor_feedbacks/$(feedbackId)) ||
+        get(/databases/$(database)/documents/projects/$(feedbackId)).data.menteeId == request.auth.uid ||
+        isMentor()
+      );
+      allow list: if isMentor();
+      allow create, update: if isMentor();
+      allow delete: if isMentor() || (
+        isSignedIn() &&
+        resource.data.projectId is string &&
+        get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.menteeId == request.auth.uid
+      );
     }
     
     match /lectures/{id} { allow read, write: if true; }

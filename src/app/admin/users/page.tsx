@@ -1,37 +1,86 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { collection, query, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Users, ShieldCheck, UserCog, Loader2, ChevronLeft, Search } from 'lucide-react';
+import { ShieldCheck, UserCog, Loader2, ChevronLeft, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+type UserRecord = {
+  id: string;
+  displayName?: string | null;
+  email?: string | null;
+  role?: string;
+  createdAt?: unknown;
+};
+
+function getCreatedAtMillis(createdAt: unknown) {
+  if (createdAt && typeof createdAt === 'object') {
+    if ('toMillis' in createdAt && typeof createdAt.toMillis === 'function') {
+      return createdAt.toMillis();
+    }
+
+    if ('toDate' in createdAt && typeof createdAt.toDate === 'function') {
+      return createdAt.toDate().getTime();
+    }
+  }
+
+  if (createdAt instanceof Date) return createdAt.getTime();
+  if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+    const time = new Date(createdAt).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  }
+
+  return 0;
+}
+
+function formatCreatedAt(createdAt: unknown) {
+  const time = getCreatedAtMillis(createdAt);
+  if (!time) return '가입일 정보 없음';
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(time));
+}
 
 function AdminUserContent() {
   const router = useRouter();
   const { user, role, loading: authLoading } = useAuthStore();
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    // 본인이 관리자가 아니면 메인으로 튕겨냄
-    if (!authLoading && role !== 'admin') {
-      router.push('/');
+    if (authLoading) return;
+
+    // 인증 확인이 끝난 뒤 멘토가 아니면 메인으로 이동한다.
+    if (!user || role !== 'mentor') {
+      router.replace('/');
       return;
     }
 
-    // 가입된 사용자 목록 실시간 감시
-    const q = query(collection(db, 'users'), orderBy('displayName', 'asc'));
-    const unsub = onSnapshot(q, (s) => {
-      setUsers(s.docs.map(d => ({ id: d.id, ...d.data() })));
+    // createdAt이 없는 기존 회원도 포함한 뒤 최신 가입자 순으로 정렬한다.
+    const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const fetchedUsers = snapshot.docs
+        .map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }) as UserRecord)
+        .sort((a, b) => getCreatedAtMillis(b.createdAt) - getCreatedAtMillis(a.createdAt));
+
+      setUsers(fetchedUsers);
+    }, (error) => {
+      console.error('Firestore user query error:', error);
     });
 
     return () => unsub();
-  }, [role, authLoading, router]);
+  }, [user, role, authLoading, router]);
 
-  const toggleAdmin = async (targetUser: any) => {
-    const newRole = targetUser.role === 'admin' ? 'user' : 'admin';
-    const message = newRole === 'admin' 
+  const toggleMentor = async (targetUser: UserRecord) => {
+    const newRole = targetUser.role === 'mentor' ? 'mentee' : 'mentor';
+    const message = newRole === 'mentor'
       ? `[${targetUser.displayName}] 님에게 관리자(강사) 권한을 부여하시겠습니까?`
       : `[${targetUser.displayName}] 님의 관리자 권한을 회수하시겠습니까?`;
 
@@ -52,7 +101,7 @@ function AdminUserContent() {
   );
 
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" /></div>;
-  if (role !== 'admin') return null;
+  if (role !== 'mentor') return null;
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-900">
@@ -87,6 +136,7 @@ function AdminUserContent() {
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest">
                 <th className="px-8 py-5">사용자 정보</th>
+                <th className="px-8 py-5">가입일</th>
                 <th className="px-8 py-5">현재 권한</th>
                 <th className="px-8 py-5 text-right">권한 변경</th>
               </tr>
@@ -98,8 +148,11 @@ function AdminUserContent() {
                     <p className="font-black text-lg">{target.displayName}</p>
                     <p className="text-slate-400 text-xs font-bold">{target.email}</p>
                   </td>
+                  <td className="px-8 py-6 whitespace-nowrap">
+                    <p className="text-sm font-bold text-slate-600">{formatCreatedAt(target.createdAt)}</p>
+                  </td>
                   <td className="px-8 py-6">
-                    {target.role === 'admin' ? (
+                    {target.role === 'mentor' ? (
                       <span className="flex items-center gap-1.5 text-blue-600 font-black text-xs uppercase bg-blue-50 px-3 py-1.5 rounded-full w-fit">
                         <ShieldCheck size={14} /> Instructor
                       </span>
@@ -113,14 +166,14 @@ function AdminUserContent() {
                     {/* 자기 자신의 권한은 변경 못하게 처리 */}
                     {target.id !== user?.uid && (
                       <button 
-                        onClick={() => toggleAdmin(target)}
+                        onClick={() => toggleMentor(target)}
                         className={`px-4 py-2 rounded-xl font-black text-xs transition-all ${
-                          target.role === 'admin'
+                          target.role === 'mentor'
                           ? 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                           : 'bg-slate-900 text-white hover:bg-black shadow-lg shadow-slate-200'
                         }`}
                       >
-                        {target.role === 'admin' ? '권한 회수' : '강사 임명'}
+                        {target.role === 'mentor' ? '권한 회수' : '강사 임명'}
                       </button>
                     )}
                   </td>

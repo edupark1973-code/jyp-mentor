@@ -54,6 +54,8 @@ function PollManagerContent() {
     setOptions(['', '']);
   };
 
+  if (role !== 'mentor') return <div className="p-10 text-center font-bold">권한이 없습니다.</div>;
+
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-900">
       <div className="max-w-4xl mx-auto">
@@ -62,15 +64,14 @@ function PollManagerContent() {
             <ChevronLeft /> 창 닫기
           </button>
           <h1 className="text-3xl font-black flex items-center gap-3">
-            <BarChart3 className="text-purple-600" size={32} /> 실시간 투표 {role === 'admin' ? '관리 센터' : '목록'}
+            <BarChart3 className="text-purple-600" size={32} /> 실시간 투표 관리 센터
           </h1>
           <div className="w-20" /> 
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* 왼쪽: 투표 생성 폼 (🌟 강사님 전용) */}
-          {role === 'admin' && (
-            <div className="md:col-span-1 space-y-6">
+          <div className="md:col-span-1 space-y-6">
               <div className="bg-white p-6 rounded-[2.5rem] shadow-xl border border-purple-100">
                 <h2 className="text-lg font-black mb-6 flex items-center gap-2 text-purple-600">
                   <Plus size={20} /> 새 투표 생성
@@ -112,11 +113,10 @@ function PollManagerContent() {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* 오른쪽: 생성된 투표 목록 (🌟 누구나 조회 가능) */}
-          <div className={`${role === 'admin' ? 'md:col-span-2' : 'md:col-span-3 max-w-2xl mx-auto w-full'} space-y-4`}>
+          <div className="md:col-span-2 space-y-4">
             <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest px-2 mb-4">현재 진행 중인 투표 리스트</h2>
             {polls.length === 0 && (
               <div className="bg-white/50 border-2 border-dashed border-slate-200 rounded-[2.5rem] py-20 text-center text-slate-400 font-bold">
@@ -160,15 +160,13 @@ function PollManagerContent() {
                   </button>
                   
                   {/* 🌟 4. 삭제 버튼만 관리자(강사) 전용으로 유지 */}
-                  {role === 'admin' && (
-                    <button 
+                  <button 
                       onClick={() => deleteDoc(doc(db, 'independent_polls', poll.id))}
                       className="p-3 bg-red-50 text-red-300 rounded-2xl hover:bg-red-500 hover:text-white transition-all"
                       title="투표 삭제"
                     >
                       <Trash2 size={20} />
-                    </button>
-                  )}
+                  </button>
                 </div>
               </div>
             ))}
