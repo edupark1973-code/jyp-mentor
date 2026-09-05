@@ -22,10 +22,32 @@ function AdminUserContent() {
       return;
     }
 
-    // 가입된 사용자 목록 실시간 감시
-    const q = query(collection(db, 'users'), orderBy('displayName', 'asc'));
+    // 가입된 사용자 목록 실시간 감시 (최신 가입자 순 정렬)
+    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (s) => {
-      setUsers(s.docs.map(d => ({ id: d.id, ...d.data() })));
+      const fetchedUsers = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      // createdAt 필드가 없거나 불완전한 경우를 처리하기 위해 추가 정렬 수행
+      fetchedUsers.sort((a: any, b: any) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
+        return timeB - timeA;
+      });
+
+      setUsers(fetchedUsers);
+    }, (error) => {
+      console.error("Firestore user query error:", error);
+      // index 미생성 등의 이유로 orderBy가 실패할 경우 기본 쿼리로 패백
+      const fallbackQuery = query(collection(db, 'users'));
+      onSnapshot(fallbackQuery, (snapshot) => {
+        const fetchedUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        fetchedUsers.sort((a: any, b: any) => {
+          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
+          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
+          return timeB - timeA;
+        });
+        setUsers(fetchedUsers);
+      });
     });
 
     return () => unsub();
