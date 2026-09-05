@@ -387,12 +387,26 @@ function WorkspaceContent() {
   const downloadBusinessPlan = () => {
     if (!project) return;
     const markdown = getExportMarkdown().replace(/\n/g, '\r\n');
-    const blob = new Blob([`\uFEFF${markdown}`], { type: 'text/markdown;charset=utf-8' });
+    
+    // Word 호환을 위한 간단한 HTML 래퍼 생성
+    const htmlContent = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <title>${project.title}</title>
+      </head>
+      <body>
+        <pre style="font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; white-space: pre-wrap; word-wrap: break-word;">${markdown}</pre>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([`\uFEFF${htmlContent}`], { type: 'application/msword;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     const safeTitle = project.title.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim() || '사업계획서';
     anchor.href = url;
-    anchor.download = `${safeTitle}_7단계_사업계획서.md`;
+    anchor.download = `${safeTitle}_7단계_사업계획서.doc`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
