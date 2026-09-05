@@ -25,6 +25,7 @@ import {
   FileText,
   FilePlus2,
   Loader2,
+  MessageCircle,
   MessageSquareText,
   PencilLine,
   Save,
@@ -523,7 +524,28 @@ function WorkspaceContent() {
             {activeStep < 7 && draft.trim() ? <div className="rounded-3xl bg-white p-4 shadow-sm"><button onClick={saveAndContinue} disabled={saving || generating} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-4 font-black text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-50">{saving || generating ? <Loader2 className="animate-spin" /> : <Save />} {saving ? '저장 후 다음 단계 AI 생성 중' : activeStep === 6 ? '최종안 확정 후 심사위원 검증' : 'AI 적용 후 다음 단계로 이동'}</button></div> : activeStep === 7 && draft.trim() ? <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-center"><p className="font-black text-amber-900">사업계획서 작성 및 심사위원 검증이 완료되었습니다.</p><p className="mt-1 text-sm text-amber-700">위 검증 내용은 제출 전 보완 여부를 판단하기 위한 참고 자료입니다.</p></div> : null}
             {activeStep >= 6 && (draft.trim() || results[6]?.aiOutput) && <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><p className="text-xs font-black uppercase tracking-wider text-emerald-700">Export Business Plan</p><h2 className="mt-1 text-xl font-black text-slate-950">사업계획서 결과물 내보내기</h2><p className="mt-2 text-sm text-slate-600">Step 6 최종 사업계획서를 본문으로, Step 7 심사 결과를 참고 부록으로 정리합니다.</p></div><div className="flex flex-col gap-2 sm:flex-row"><button onClick={downloadBusinessPlan} className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-700 px-5 py-3.5 text-sm font-black text-white transition hover:bg-emerald-800"><Download size={18} /> 사업계획서 파일 다운로드</button><button onClick={() => void sendToMentor()} disabled={sendingToMentor || sentToMentor} className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-white px-5 py-3.5 text-sm font-black text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60">{sendingToMentor ? <Loader2 className="animate-spin" size={18} /> : sentToMentor ? <Check size={18} /> : <Send size={18} />} {sendingToMentor ? '보내는 중' : sentToMentor ? '멘토에게 전송 완료' : '멘토에게 보내기'}</button></div></div></section>}
           </main>
-          <aside className="space-y-5 xl:sticky xl:top-24 xl:self-start"><FeedbackAccordion feedback={feedback} /><section className="rounded-3xl bg-slate-950 p-5 text-white"><Sparkles className="text-blue-400" /><h2 className="mt-3 font-black">자동 체이닝 작동 중</h2><p className="mt-2 text-xs leading-6 text-slate-400">Step 6에서 편집·확정한 최종 사업계획서를 기준으로 Step 7의 읽기 전용 심사 참고 보고서가 자동 생성됩니다.</p></section></aside>
+          <aside className="space-y-5 xl:sticky xl:top-24 xl:self-start">
+            <FeedbackAccordion feedback={feedback} />
+            
+            <a 
+              href="http://pf.kakao.com/_YOUR_CHANNEL_ID/chat" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center justify-between rounded-3xl bg-[#FEE500] p-5 text-[#371D1E] shadow-sm transition hover:bg-[#FDD800]"
+            >
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider opacity-80">Need Help?</p>
+                <h2 className="mt-1 font-black">카카오톡 1:1 문의하기</h2>
+              </div>
+              <MessageCircle size={28} />
+            </a>
+
+            <section className="rounded-3xl bg-slate-950 p-5 text-white">
+              <Sparkles className="text-blue-400" />
+              <h2 className="mt-3 font-black">자동 체이닝 작동 중</h2>
+              <p className="mt-2 text-xs leading-6 text-slate-400">Step 6에서 편집·확정한 최종 사업계획서를 기준으로 Step 7의 읽기 전용 심사 참고 보고서가 자동 생성됩니다.</p>
+            </section>
+          </aside>
         </div>
       </div>
     </div>
