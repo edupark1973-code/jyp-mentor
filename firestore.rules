@@ -87,7 +87,13 @@ service cloud.firestore {
     match /projects/{projectId} {
       allow read: if isSignedIn() && (resource.data.menteeId == request.auth.uid || isMentor());
       allow create: if isSignedIn() && request.resource.data.menteeId == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.menteeId == request.auth.uid || isMentor());
+      allow update: if isSignedIn() && (
+        (resource.data.menteeId == request.auth.uid &&
+          request.resource.data.get('hiddenForMentor', false) == resource.data.get('hiddenForMentor', false)) ||
+        (isMentor() &&
+          request.resource.data.get('hiddenForMentee', false) == resource.data.get('hiddenForMentee', false))
+      );
+      allow delete: if isSignedIn() && (resource.data.menteeId == request.auth.uid || isMentor());
     }
 
     match /step_results/{resultId} {

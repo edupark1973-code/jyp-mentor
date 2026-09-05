@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, Timestamp } from 'firebase/firestore';
-import { ArrowRight, FolderKanban, Loader2, Search, Trash2, Users } from 'lucide-react';
+import { collection, doc, onSnapshot, Timestamp, updateDoc } from 'firebase/firestore';
+import { ArrowRight, EyeOff, FolderKanban, Loader2, Search, Users } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { deleteProjectWithRelatedData } from '@/lib/deleteProject';
 import { useAuthStore } from '@/store/useAuthStore';
 
 interface ProjectSummary {
@@ -15,6 +14,7 @@ interface ProjectSummary {
   title: string;
   currentStep: number;
   updatedAt?: Timestamp;
+  hiddenForMentor?: boolean;
 }
 
 interface UserSummary {
@@ -50,7 +50,7 @@ export default function MentorDashboardPage() {
     };
 
     const unsubscribeProjects = onSnapshot(collection(db, 'projects'), (snapshot) => {
-      const nextProjects = snapshot.docs.map((projectDoc) => {
+      const nextProjects = snapshot.docs.filter((projectDoc) => projectDoc.data().hiddenForMentor !== true).map((projectDoc) => {
         const data = projectDoc.data();
         return {
           id: projectDoc.id,
@@ -58,6 +58,7 @@ export default function MentorDashboardPage() {
           title: String(data.title ?? data.initialIdea ?? '제목 없는 프로젝트'),
           currentStep: Number(data.currentStep ?? 1),
           updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt : undefined,
+          hiddenForMentor: data.hiddenForMentor === true,
         };
       });
       nextProjects.sort((a, b) => (b.updatedAt?.toMillis() ?? 0) - (a.updatedAt?.toMillis() ?? 0));
@@ -88,15 +89,15 @@ export default function MentorDashboardPage() {
     });
   }, [projects, search, users]);
 
-  const deleteProject = async (project: ProjectSummary) => {
-    if (!window.confirm(`'${project.title}' 프로젝트를 삭제하시겠습니까?\n멘티의 최종 사업계획서와 멘토 피드백도 함께 삭제되며 복구할 수 없습니다.`)) return;
+  const hideProject = async (project: ProjectSummary) => {
+    if (!window.confirm(`'${project.title}' 프로젝트를 내 목록에서 숨기시겠습니까?\n멘티의 목록과 저장된 프로젝트 데이터에는 영향을 주지 않습니다.`)) return;
     setDeletingId(project.id);
     setError('');
     try {
-      await deleteProjectWithRelatedData(project.id);
-    } catch (deleteError) {
-      console.error('프로젝트 삭제 실패:', deleteError);
-      setError('프로젝트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      await updateDoc(doc(db, 'projects', project.id), { hiddenForMentor: true });
+    } catch (hideError) {
+      console.error('프로젝트 숨김 실패:', hideError);
+      setError('프로젝트를 목록에서 숨기지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setDeletingId('');
     }
@@ -142,7 +143,7 @@ export default function MentorDashboardPage() {
                     <td className="px-6 py-5 font-bold text-slate-700">{project.title}</td>
                     <td className="px-6 py-5"><span className="rounded-full bg-blue-100 px-3 py-1.5 text-xs font-black text-blue-700">STEP {project.currentStep} / 7</span></td>
                     <td className="px-6 py-5 text-sm text-slate-500">{formatTimestamp(project.updatedAt)}</td>
-                    <td className="px-6 py-5"><div className="flex items-center justify-end gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); void deleteProject(project); }} disabled={Boolean(deletingId)} aria-label={`${project.title} 프로젝트 삭제`} className="rounded-xl p-2 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}</button><ArrowRight className="text-blue-600" size={18} /></div></td>
+                    <td className="px-6 py-5"><div className="flex items-center justify-end gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); void hideProject(project); }} disabled={Boolean(deletingId)} aria-label={`${project.title} 내 목록에서 숨기기`} title="내 목록에서 숨기기" className="rounded-xl p-2 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <EyeOff size={18} />}</button><ArrowRight className="text-blue-600" size={18} /></div></td>
                   </tr>
                 );
               })}
@@ -153,7 +154,7 @@ export default function MentorDashboardPage() {
         <div className="grid gap-4 md:hidden">
           {filteredProjects.map((project) => {
             const mentee = users[project.menteeId];
-            return <div key={project.id} className="relative rounded-3xl border border-slate-200 bg-white shadow-sm"><Link href={`/admin/projects/${project.id}`} className="block p-5 pr-16"><div className="mb-4 flex items-start justify-between"><div><p className="font-black text-slate-950">{mentee?.displayName || '이름 미등록'}</p><p className="text-xs text-slate-500">{mentee?.email || '이메일 미등록'}</p></div><span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-black text-blue-700">STEP {project.currentStep}</span></div><h2 className="text-lg font-black text-slate-800">{project.title}</h2><p className="mt-3 text-xs text-slate-400">{formatTimestamp(project.updatedAt)}</p></Link><button type="button" onClick={() => void deleteProject(project)} disabled={Boolean(deletingId)} aria-label={`${project.title} 프로젝트 삭제`} className="absolute bottom-4 right-4 rounded-xl p-2.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}</button></div>;
+            return <div key={project.id} className="relative rounded-3xl border border-slate-200 bg-white shadow-sm"><Link href={`/admin/projects/${project.id}`} className="block p-5 pr-16"><div className="mb-4 flex items-start justify-between"><div><p className="font-black text-slate-950">{mentee?.displayName || '이름 미등록'}</p><p className="text-xs text-slate-500">{mentee?.email || '이메일 미등록'}</p></div><span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-black text-blue-700">STEP {project.currentStep}</span></div><h2 className="text-lg font-black text-slate-800">{project.title}</h2><p className="mt-3 text-xs text-slate-400">{formatTimestamp(project.updatedAt)}</p></Link><button type="button" onClick={() => void hideProject(project)} disabled={Boolean(deletingId)} aria-label={`${project.title} 내 목록에서 숨기기`} title="내 목록에서 숨기기" className="absolute bottom-4 right-4 rounded-xl p-2.5 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <EyeOff size={18} />}</button></div>;
           })}
         </div>
 

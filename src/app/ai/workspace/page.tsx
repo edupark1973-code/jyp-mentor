@@ -11,6 +11,8 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
+  Timestamp,
+  updateDoc,
   writeBatch,
   where,
 } from 'firebase/firestore';
@@ -31,11 +33,10 @@ import {
   Save,
   Send,
   Sparkles,
-  Trash2,
+  EyeOff,
   Upload,
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
-import { deleteProjectWithRelatedData } from '@/lib/deleteProject';
 import { downloadBusinessPlanDocx } from '@/lib/exportBusinessPlanDocx';
 import { sendBusinessPlanReviewNotification } from '@/lib/notifications';
 import MarkdownDocument from '@/components/MarkdownDocument';
@@ -58,6 +59,7 @@ interface ProjectData {
   currentStep: number;
   menteeId: string;
   sourceDocumentName?: string;
+  hiddenForMentee?: boolean;
 }
 
 interface StepResult {
@@ -69,7 +71,7 @@ interface StepResult {
 interface CommentItem {
   id: string;
   content: string;
-  createdAt?: any;
+  createdAt?: Timestamp;
 }
 
 interface FeedbackData {
@@ -157,7 +159,7 @@ function ProjectEntry({ userId }: { userId: string }) {
   useEffect(() => {
     const projectsQuery = query(collection(db, 'projects'), where('menteeId', '==', userId));
     return onSnapshot(projectsQuery, (snapshot) => {
-      setProjects(snapshot.docs.map((projectDoc) => {
+      setProjects(snapshot.docs.filter((projectDoc) => projectDoc.data().hiddenForMentee !== true).map((projectDoc) => {
         const data = projectDoc.data();
         return {
           id: projectDoc.id,
@@ -166,6 +168,7 @@ function ProjectEntry({ userId }: { userId: string }) {
           currentStep: Number(data.currentStep ?? 1),
           menteeId: String(data.menteeId ?? ''),
           sourceDocumentName: String(data.sourceDocumentName ?? ''),
+          hiddenForMentee: data.hiddenForMentee === true,
         };
       }));
     });
@@ -227,15 +230,15 @@ function ProjectEntry({ userId }: { userId: string }) {
     }
   };
 
-  const deleteProject = async (project: ProjectData) => {
-    if (!window.confirm(`'${project.title}' 프로젝트를 삭제하시겠습니까?\n저장된 단계별 결과와 멘토 피드백도 함께 삭제되며 복구할 수 없습니다.`)) return;
+  const hideProject = async (project: ProjectData) => {
+    if (!window.confirm(`'${project.title}' 프로젝트를 내 목록에서 숨기시겠습니까?\n멘토의 목록과 저장된 프로젝트 데이터에는 영향을 주지 않습니다.`)) return;
     setDeletingId(project.id);
     setEntryError('');
     try {
-      await deleteProjectWithRelatedData(project.id);
-    } catch (deleteError) {
-      console.error('프로젝트 삭제 실패:', deleteError);
-      setEntryError('프로젝트를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      await updateDoc(doc(db, 'projects', project.id), { hiddenForMentee: true });
+    } catch (hideError) {
+      console.error('프로젝트 숨김 실패:', hideError);
+      setEntryError('프로젝트를 목록에서 숨기지 못했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       setDeletingId('');
     }
@@ -271,7 +274,7 @@ function ProjectEntry({ userId }: { userId: string }) {
             <button onClick={createProject} disabled={creating || analyzing || !title.trim() || (startMode === 'idea' ? !initialIdea.trim() : !sourceAnalysis.trim())} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-4 font-black text-white disabled:opacity-50">{creating ? <Loader2 className="animate-spin" /> : <Sparkles />} 확인 후 7단계 기획 시작하기</button>
           </div>
         </section>
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-black">진행 중인 프로젝트</h2>{entryError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{entryError}</p>}<div className="mt-5 space-y-3">{projects.map((project) => <div key={project.id} className="flex items-center rounded-2xl border border-slate-100 bg-slate-50 transition hover:border-blue-200 hover:bg-blue-50"><Link href={`/ai/workspace?projectId=${project.id}`} className="flex min-w-0 flex-1 items-center justify-between p-4"><div className="min-w-0"><p className="truncate font-black text-slate-900">{project.title}</p><p className="mt-1 line-clamp-1 text-xs text-slate-500">{project.initialIdea}</p></div><div className="ml-4 flex shrink-0 items-center gap-2"><span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-700">STEP {project.currentStep}</span><ChevronRight size={18} /></div></Link><button type="button" onClick={() => void deleteProject(project)} disabled={Boolean(deletingId)} aria-label={`${project.title} 프로젝트 삭제`} className="mr-3 rounded-xl p-2.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}</button></div>)}{projects.length === 0 && <p className="py-16 text-center font-bold text-slate-400">아직 프로젝트가 없습니다.</p>}</div></section>
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><h2 className="text-xl font-black">진행 중인 프로젝트</h2>{entryError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-700">{entryError}</p>}<div className="mt-5 space-y-3">{projects.map((project) => <div key={project.id} className="flex items-center rounded-2xl border border-slate-100 bg-slate-50 transition hover:border-blue-200 hover:bg-blue-50"><Link href={`/ai/workspace?projectId=${project.id}`} className="flex min-w-0 flex-1 items-center justify-between p-4"><div className="min-w-0"><p className="truncate font-black text-slate-900">{project.title}</p><p className="mt-1 line-clamp-1 text-xs text-slate-500">{project.initialIdea}</p></div><div className="ml-4 flex shrink-0 items-center gap-2"><span className="rounded-full bg-white px-3 py-1 text-xs font-black text-blue-700">STEP {project.currentStep}</span><ChevronRight size={18} /></div></Link><button type="button" onClick={() => void hideProject(project)} disabled={Boolean(deletingId)} aria-label={`${project.title} 내 목록에서 숨기기`} title="내 목록에서 숨기기" className="mr-3 rounded-xl p-2.5 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <EyeOff size={18} />}</button></div>)}{projects.length === 0 && <p className="py-16 text-center font-bold text-slate-400">아직 프로젝트가 없습니다.</p>}</div></section>
       </div>
     </div>
   );
