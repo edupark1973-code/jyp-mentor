@@ -1,16 +1,58 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { collection, query, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Users, ShieldCheck, UserCog, Loader2, ChevronLeft, Search } from 'lucide-react';
+import { ShieldCheck, UserCog, Loader2, ChevronLeft, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+type UserRecord = {
+  id: string;
+  displayName?: string | null;
+  email?: string | null;
+  role?: string;
+  createdAt?: unknown;
+};
+
+function getCreatedAtMillis(createdAt: unknown) {
+  if (createdAt && typeof createdAt === 'object') {
+    if ('toMillis' in createdAt && typeof createdAt.toMillis === 'function') {
+      return createdAt.toMillis();
+    }
+
+    if ('toDate' in createdAt && typeof createdAt.toDate === 'function') {
+      return createdAt.toDate().getTime();
+    }
+  }
+
+  if (createdAt instanceof Date) return createdAt.getTime();
+  if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+    const time = new Date(createdAt).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  }
+
+  return 0;
+}
+
+function formatCreatedAt(createdAt: unknown) {
+  const time = getCreatedAtMillis(createdAt);
+  if (!time) return '가입일 정보 없음';
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(time));
+}
 
 function AdminUserContent() {
   const router = useRouter();
   const { user, role, loading: authLoading } = useAuthStore();
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -22,38 +64,21 @@ function AdminUserContent() {
       return;
     }
 
-    // 가입된 사용자 목록 실시간 감시 (최신 가입자 순 정렬)
-    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (s) => {
-      const fetchedUsers = s.docs.map(d => ({ id: d.id, ...d.data() }));
-      
-      // createdAt 필드가 없거나 불완전한 경우를 처리하기 위해 추가 정렬 수행
-      fetchedUsers.sort((a: any, b: any) => {
-        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-        return timeB - timeA;
-      });
+    // createdAt이 없는 기존 회원도 포함한 뒤 최신 가입자 순으로 정렬한다.
+    const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const fetchedUsers = snapshot.docs
+        .map((userDoc) => ({ id: userDoc.id, ...userDoc.data() }) as UserRecord)
+        .sort((a, b) => getCreatedAtMillis(b.createdAt) - getCreatedAtMillis(a.createdAt));
 
       setUsers(fetchedUsers);
     }, (error) => {
-      console.error("Firestore user query error:", error);
-      // index 미생성 등의 이유로 orderBy가 실패할 경우 기본 쿼리로 패백
-      const fallbackQuery = query(collection(db, 'users'));
-      onSnapshot(fallbackQuery, (snapshot) => {
-        const fetchedUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        fetchedUsers.sort((a: any, b: any) => {
-          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-          return timeB - timeA;
-        });
-        setUsers(fetchedUsers);
-      });
+      console.error('Firestore user query error:', error);
     });
 
     return () => unsub();
   }, [user, role, authLoading, router]);
 
-  const toggleMentor = async (targetUser: any) => {
+  const toggleMentor = async (targetUser: UserRecord) => {
     const newRole = targetUser.role === 'mentor' ? 'mentee' : 'mentor';
     const message = newRole === 'mentor'
       ? `[${targetUser.displayName}] 님에게 관리자(강사) 권한을 부여하시겠습니까?`
@@ -111,6 +136,7 @@ function AdminUserContent() {
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-50 text-slate-400 text-xs font-black uppercase tracking-widest">
                 <th className="px-8 py-5">사용자 정보</th>
+                <th className="px-8 py-5">가입일</th>
                 <th className="px-8 py-5">현재 권한</th>
                 <th className="px-8 py-5 text-right">권한 변경</th>
               </tr>
@@ -121,6 +147,9 @@ function AdminUserContent() {
                   <td className="px-8 py-6">
                     <p className="font-black text-lg">{target.displayName}</p>
                     <p className="text-slate-400 text-xs font-bold">{target.email}</p>
+                  </td>
+                  <td className="px-8 py-6 whitespace-nowrap">
+                    <p className="text-sm font-bold text-slate-600">{formatCreatedAt(target.createdAt)}</p>
                   </td>
                   <td className="px-8 py-6">
                     {target.role === 'mentor' ? (
