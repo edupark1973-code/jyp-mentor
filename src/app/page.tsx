@@ -6,7 +6,8 @@ import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverT
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock, Pin, ChevronUp, ChevronDown, Pencil, Settings } from 'lucide-react';
+import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock, Pin, ChevronUp, ChevronDown, Pencil, QrCode, Settings } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 // --- 유틸리티: 이미지 압축 (에러 방어 로직 추가) ---
 const compressImage = (file: File): Promise<Blob | File> => {
@@ -93,12 +94,27 @@ function HomeContent() {
   const [isPublic, setIsPublic] = useState(true);
   const [allowStudentPosts, setAllowStudentPosts] = useState(false);
   const [viewMode, setViewMode] = useState<'workspace' | 'public'>('workspace');
+  const [isSiteQrOpen, setIsSiteQrOpen] = useState(false);
+  const [siteUrl, setSiteUrl] = useState('');
 
   // ⭐ 추가된 상태(State) - 설정 모달 및 디스코드 주소
   const [isProfileSettingsOpen, setIsProfileSettingsOpen] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
   const [isSavingWebhook, setIsSavingWebhook] = useState(false);
   const [isWebhookSaved, setIsWebhookSaved] = useState(false);
+
+  useEffect(() => {
+    setSiteUrl(window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    if (!isSiteQrOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsSiteQrOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [isSiteQrOpen]);
 
   useEffect(() => {
     const q = query(collection(db, 'lectures'), orderBy('createdAt', 'desc'));
@@ -176,17 +192,46 @@ function HomeContent() {
               <p className="text-slate-500 text-[10px] md:text-xs font-black uppercase tracking-[0.2em] md:tracking-[0.3em] mt-1">{role === 'mentor' && user && viewMode === 'workspace' ? `${user.displayName || '강사'}'s Workspace` : 'Public Courses'}</p>
             </div>
           </div>
-          {role === 'mentor' && (
-            <div className="flex items-center gap-2 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button onClick={() => setIsSiteQrOpen(true)} className="flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 bg-white text-slate-950 rounded-xl md:rounded-[1.25rem] font-black text-sm flex items-center justify-center gap-2 hover:bg-blue-50 transition-all active:scale-95 shadow-xl shadow-black/10">
+              <QrCode size={18} /> 사이트 접속 QR
+            </button>
+            {role === 'mentor' && (
+              <>
               <button onClick={() => setIsProfileSettingsOpen(true)} className="flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 bg-slate-800 text-white rounded-xl md:rounded-[1.25rem] font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-700 transition-all active:scale-95">
                 <Settings size={18} /> 설정
               </button>
               <button onClick={() => setIsAddingLecture(true)} className="flex-1 md:flex-none px-4 md:px-8 py-3 md:py-4 bg-blue-600 text-white rounded-xl md:rounded-[1.25rem] font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-blue-500/20 hover:bg-blue-500 transition-all active:scale-95">
                 <Plus size={18} /> 새 강좌
               </button>
-            </div>
-          )}
+              </>
+            )}
+          </div>
         </header>
+
+        {isSiteQrOpen && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+            onMouseDown={(event) => { if (event.target === event.currentTarget) setIsSiteQrOpen(false); }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="site-qr-title"
+          >
+            <div className="relative w-full max-w-xl rounded-[2rem] bg-white p-6 text-center text-slate-950 shadow-2xl sm:p-10">
+              <button type="button" onClick={() => setIsSiteQrOpen(false)} aria-label="QR 팝업 닫기" className="absolute right-4 top-4 rounded-full bg-slate-100 p-2.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-950">
+                <X size={22} />
+              </button>
+              <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Quick Access</p>
+              <h2 id="site-qr-title" className="mt-2 text-2xl font-black sm:text-3xl">사이트 바로 접속하기</h2>
+              <p className="mt-3 text-sm font-semibold text-slate-500">휴대폰 카메라로 QR코드를 스캔해 주세요.</p>
+              <div className="mx-auto mt-6 aspect-square w-full max-w-[420px] rounded-3xl border-8 border-slate-950 bg-white p-4 sm:p-6">
+                {siteUrl ? <QRCodeSVG value={siteUrl} level="H" size={420} className="h-full w-full" /> : <div className="h-full w-full animate-pulse rounded-xl bg-slate-100" />}
+              </div>
+              <p className="mx-auto mt-5 max-w-md break-all rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">{siteUrl}</p>
+              <p className="mt-3 text-xs font-medium text-slate-400">바깥 영역을 누르거나 ESC 키를 누르면 닫힙니다.</p>
+            </div>
+          </div>
+        )}
 
         {role === 'mentee' && user && (
           <button
