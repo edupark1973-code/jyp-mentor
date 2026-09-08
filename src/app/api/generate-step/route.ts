@@ -204,8 +204,20 @@ function buildAccumulatedContext(projectTitle: string, initialIdea: string, sour
     sections.push(`[Step ${step.stepNumber} 확정 결과 - 창업가 편집본 우선]\n${step.aiOutput}`);
   }
   if (mentorFeedback) {
-    const mentorComment = String(mentorFeedback.mentorComment ?? '').trim();
-    if (mentorComment) sections.push(`[멘토 코멘트]\n${mentorComment}`);
+    const comments = Array.isArray(mentorFeedback.comments)
+      ? mentorFeedback.comments
+          .map((comment) => {
+            if (!comment || typeof comment !== 'object') return '';
+            return String((comment as Record<string, unknown>).content ?? '').trim();
+          })
+          .filter(Boolean)
+          .reverse()
+      : [];
+    const legacyComment = String(mentorFeedback.mentorComment ?? '').trim();
+    const mentorComments = comments.length > 0 ? comments : legacyComment ? [legacyComment] : [];
+    if (mentorComments.length > 0) {
+      sections.push(`[멘토 누적 코멘트 - 오래된 순서]\n${mentorComments.map((comment, index) => `${index + 1}. ${comment}`).join('\n\n')}`);
+    }
   }
   const context = sections.join('\n\n');
   return context.length > MAX_CONTEXT_LENGTH

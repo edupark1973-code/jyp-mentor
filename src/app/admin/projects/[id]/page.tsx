@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { collection, deleteField, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { collection, deleteField, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, Timestamp, where } from 'firebase/firestore';
 import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Mail, Plus, Save, Clock, ExternalLink } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { sendMentorFeedbackNotification } from '@/lib/notifications';
@@ -31,8 +31,18 @@ interface StepResult {
 interface CommentItem {
   id: string;
   content: string;
-  createdAt?: any;
+  createdAt?: string | Timestamp;
 }
+
+const STEP_TITLES: Record<number, string> = {
+  1: '초기 아이디어',
+  2: '문제 정의',
+  3: '실현 가능성',
+  4: '성장 전략',
+  5: '팀 구성',
+  6: '최종 사업계획서',
+  7: '가상 심사위원 검증 · 참고용',
+};
 
 // 텍스트 내 URL을 감지하여 클릭 가능한 링크로 전환해주는 헬퍼 컴포넌트
 function AutoFormattedText({ text }: { text: string }) {
@@ -115,30 +125,28 @@ export default function MentorProjectDetailPage() {
 
     const stepsQuery = query(collection(db, 'step_results'), where('projectId', '==', projectId));
     const unsubscribeSteps = onSnapshot(stepsQuery, (snapshot) => {
-      let finalPlan: StepResult | undefined;
-      let judgeReview: StepResult | undefined;
+      const currentWorkflowSteps = new Map<number, StepResult>();
       let legacyStep6: StepResult | undefined;
       let legacyStep7: StepResult | undefined;
 
       snapshot.docs.forEach((stepDoc) => {
         const data = stepDoc.data();
         const stepNumber = Number(data.stepNumber ?? 0);
-        if (stepNumber !== 6 && stepNumber !== 7) return;
+        if (stepNumber < 1 || stepNumber > 7) return;
         const result = { id: stepDoc.id, stepNumber, aiOutput: String(data.aiOutput ?? '') };
         const workflowVersion = Number(data.workflowVersion ?? 1);
-        if (workflowVersion >= 2 && stepNumber === 6) finalPlan = result;
-        else if (workflowVersion >= 2 && stepNumber === 7) judgeReview = result;
+        if (workflowVersion >= 2 || stepNumber <= 5) currentWorkflowSteps.set(stepNumber, result);
         else if (stepNumber === 6) legacyStep6 = result;
-        else legacyStep7 = result;
+        else if (stepNumber === 7) legacyStep7 = result;
       });
 
-      if (!finalPlan && legacyStep7) {
-        finalPlan = { id: legacyStep7.id, aiOutput: legacyStep7.aiOutput, stepNumber: 6 };
+      if (!currentWorkflowSteps.has(6) && legacyStep7) {
+        currentWorkflowSteps.set(6, { id: legacyStep7.id, aiOutput: legacyStep7.aiOutput, stepNumber: 6 });
       }
-      if (!judgeReview && legacyStep6) {
-        judgeReview = { id: legacyStep6.id, aiOutput: legacyStep6.aiOutput, stepNumber: 7 };
+      if (!currentWorkflowSteps.has(7) && legacyStep6) {
+        currentWorkflowSteps.set(7, { id: legacyStep6.id, aiOutput: legacyStep6.aiOutput, stepNumber: 7 });
       }
-      setSteps([finalPlan, judgeReview].filter((step): step is StepResult => Boolean(step)));
+      setSteps([...currentWorkflowSteps.values()].sort((a, b) => a.stepNumber - b.stepNumber));
     });
 
     const unsubscribeFeedback = onSnapshot(feedbackRef, (snapshot) => {
@@ -242,10 +250,10 @@ export default function MentorProjectDetailPage() {
           <main className="space-y-4">
             {steps.map((step) => {
               const isOpen = openSteps[step.stepNumber] ?? true;
-              const isFinalPlan = step.stepNumber === 6;
-              return <section key={`${step.id}-${step.stepNumber}`} className={`overflow-hidden rounded-3xl border bg-white shadow-sm ${isFinalPlan ? 'border-blue-200' : 'border-amber-200'}`}><button onClick={() => setOpenSteps((current) => ({ ...current, [step.stepNumber]: !isOpen }))} className={`flex w-full items-center justify-between p-5 text-left sm:p-6 ${isFinalPlan ? 'bg-blue-50' : 'bg-amber-50'}`}><div><span className={`text-xs font-black ${isFinalPlan ? 'text-blue-600' : 'text-amber-700'}`}>STEP {step.stepNumber}</span><h2 className="mt-1 text-lg font-black text-slate-900">{isFinalPlan ? '멘티 최종 사업계획서' : '가상 심사위원 검증 · 참고용'}</h2></div>{isOpen ? <ChevronUp /> : <ChevronDown />}</button>{isOpen && <div className="border-t border-slate-100 p-5 sm:p-6"><MarkdownDocument content={step.aiOutput || '생성된 결과가 없습니다.'} /></div>}</section>;
+              const isJudgeReview = step.stepNumber === 7;
+              return <section key={`${step.id}-${step.stepNumber}`} className={`overflow-hidden rounded-3xl border bg-white shadow-sm ${isJudgeReview ? 'border-amber-200' : 'border-blue-200'}`}><button onClick={() => setOpenSteps((current) => ({ ...current, [step.stepNumber]: !isOpen }))} className={`flex w-full items-center justify-between p-5 text-left sm:p-6 ${isJudgeReview ? 'bg-amber-50' : 'bg-blue-50'}`}><div><span className={`text-xs font-black ${isJudgeReview ? 'text-amber-700' : 'text-blue-600'}`}>STEP {step.stepNumber}</span><h2 className="mt-1 text-lg font-black text-slate-900">{STEP_TITLES[step.stepNumber] ?? `Step ${step.stepNumber}`}</h2></div>{isOpen ? <ChevronUp /> : <ChevronDown />}</button>{isOpen && <div className="border-t border-slate-100 p-5 sm:p-6"><MarkdownDocument content={step.aiOutput || '생성된 결과가 없습니다.'} /></div>}</section>;
             })}
-            {steps.length === 0 && <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white px-6 py-20 text-center"><p className="font-black text-slate-500">아직 최종 검토 결과가 없습니다.</p><p className="mt-2 text-sm text-slate-400">멘티가 Step 6 최종 사업계획서를 완료하면 이곳에 표시됩니다.</p></div>}
+            {steps.length === 0 && <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-white px-6 py-20 text-center"><p className="font-black text-slate-500">아직 생성된 단계 결과가 없습니다.</p><p className="mt-2 text-sm text-slate-400">멘티가 사업계획서 작성을 시작하면 각 단계의 결과가 이곳에 표시됩니다.</p></div>}
           </main>
 
           <aside className="space-y-5 xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-2">
