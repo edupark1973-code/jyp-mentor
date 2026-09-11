@@ -1,4 +1,4 @@
-import { getFirebaseAdmin, serverTimestamp } from '@/lib/firebaseAdmin';
+import { commitUserDocuments, getUserDocument, queryUserDocuments } from '@/lib/firestoreUserRest';
 
 export const runtime = 'nodejs';
 
@@ -273,23 +273,12 @@ export async function POST(request: Request) {
     if (!Number.isInteger(currentStep) || currentStep < 1 || currentStep > 7) return jsonError('currentStep은 1부터 7 사이의 정수여야 합니다.', 400);
     if (userInput.length > MAX_USER_INPUT_LENGTH) return jsonError(`userInput은 ${MAX_USER_INPUT_LENGTH.toLocaleString()}자 이하여야 합니다.`, 400);
 
-    const { adminAuth, adminDb } = getFirebaseAdmin();
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    const [projectSnapshot, requesterSnapshot] = await Promise.all([
-      adminDb.collection('projects').doc(projectId).get(),
-      adminDb.collection('users').doc(decodedToken.uid).get(),
-    ]);
-    if (!projectSnapshot.exists) return jsonError('프로젝트를 찾을 수 없습니다.', 404);
+    const projectData = await getUserDocument(token, 'projects', projectId);
+    if (!projectData) return jsonError('프로젝트를 찾을 수 없습니다.', 404);
 
-    const projectData = projectSnapshot.data() ?? {};
-    const ownerId = String(projectData.menteeId ?? projectData.userId ?? '');
-    const isMentor = requesterSnapshot.data()?.role === 'mentor';
-    if (ownerId !== decodedToken.uid && !isMentor) return jsonError('이 프로젝트에 접근할 권한이 없습니다.', 403);
-
-    const stepsSnapshot = await adminDb.collection('step_results').where('projectId', '==', projectId).get();
-    const previousSteps: StoredStepResult[] = stepsSnapshot.docs
-      .map((stepDoc: { data: () => Record<string, unknown> }) => {
-        const data = stepDoc.data();
+    const stepDocuments = await queryUserDocuments(token, 'step_results', 'projectId', projectId);
+    const previousSteps: StoredStepResult[] = stepDocuments
+      .map((data) => {
         return {
           stepNumber: Number(data.stepNumber ?? data.step_number ?? 0),
           userInput: String(data.userInput ?? data.user_input ?? ''),
@@ -305,8 +294,7 @@ export async function POST(request: Request) {
 
     let mentorFeedback: Record<string, unknown> | undefined;
     if (currentStep === 6) {
-      const feedbackSnapshot = await adminDb.collection('mentor_feedbacks').doc(projectId).get();
-      mentorFeedback = feedbackSnapshot.exists ? feedbackSnapshot.data() : undefined;
+      mentorFeedback = await getUserDocument(token, 'mentor_feedbacks', projectId);
     }
 
     const promptConfig = STEP_PROMPTS[currentStep];
@@ -321,22 +309,18 @@ export async function POST(request: Request) {
     const userDirective = `[누적 컨텍스트]\n${accumulatedContext}\n\n[현재 창업가 추가 입력]\n${userInput || '추가 입력 없음. 누적 자료에 없는 내용을 임의로 확장하지 말고, 필요한 정보는 추가 확인 필요로 표시할 것.'}\n\n[이번 단계 과업]\n${promptConfig.task}\n\n이전 단계의 본문을 재작성하지 말고 이번 단계에서 새로 결정할 핵심만 작성할 것.`;
     const { output: aiOutput, model } = await callGemini(currentStep, promptConfig.systemPrompt, userDirective);
 
-    const resultRef = adminDb.collection('step_results').doc(`${projectId}_step_${currentStep}`);
-    const batch = adminDb.batch();
-    batch.set(resultRef, {
-      projectId,
-      stepNumber: currentStep,
-      userInput,
-      aiOutput,
-      model,
-      workflowVersion: 2,
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    batch.set(projectSnapshot.ref, {
-      currentStep: Math.max(Number(projectData.currentStep ?? 1), currentStep),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    await batch.commit();
+    await commitUserDocuments(token, [
+      {
+        collectionId: 'step_results',
+        documentId: `${projectId}_step_${currentStep}`,
+        data: { projectId, stepNumber: currentStep, userInput, aiOutput, model, workflowVersion: 2 },
+      },
+      {
+        collectionId: 'projects',
+        documentId: projectId,
+        data: { currentStep: Math.max(Number(projectData.currentStep ?? 1), currentStep) },
+      },
+    ]);
 
     return Response.json({ success: true, projectId, currentStep, stepName: promptConfig.stepName, aiOutput });
   } catch (error) {
