@@ -15,7 +15,14 @@ jobs:
 
       # 👇👇 [새로 추가된 핵심 단계] 서버 엔진에 넘겨줄 비밀번호 포스트잇(.env.production)을 직접 만듭니다 👇👇
       - name: Create env file
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY repository secret is required for deployment" >&2
+            exit 1
+          fi
+          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" >> .env.production
           echo "GOOGLE_CLIENT_EMAIL=${{ secrets.GOOGLE_CLIENT_EMAIL }}" >> .env.production
           echo "GOOGLE_PRIVATE_KEY=\"${{ secrets.GOOGLE_PRIVATE_KEY }}\"" >> .env.production
 
