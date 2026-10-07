@@ -22,7 +22,7 @@ jobs:
             echo "GEMINI_API_KEY repository secret is required for deployment" >&2
             exit 1
           fi
-          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" >> .env.production
+          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" >> .env
       - run: npm run build
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:

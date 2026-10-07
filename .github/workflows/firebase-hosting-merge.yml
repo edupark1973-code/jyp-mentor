@@ -22,9 +22,9 @@ jobs:
             echo "GEMINI_API_KEY repository secret is required for deployment" >&2
             exit 1
           fi
-          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" >> .env.production
-          echo "GOOGLE_CLIENT_EMAIL=${{ secrets.GOOGLE_CLIENT_EMAIL }}" >> .env.production
-          echo "GOOGLE_PRIVATE_KEY=\"${{ secrets.GOOGLE_PRIVATE_KEY }}\"" >> .env.production
+          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" >> .env
+          echo "GOOGLE_CLIENT_EMAIL=${{ secrets.GOOGLE_CLIENT_EMAIL }}" >> .env
+          echo "GOOGLE_PRIVATE_KEY=\"${{ secrets.GOOGLE_PRIVATE_KEY }}\"" >> .env
 
       # ✅ 핵심: 빌드할 때 시크릿 값을 환경 변수로 주입합니다
       - name: Build
