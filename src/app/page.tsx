@@ -6,7 +6,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverT
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock, Pin, ChevronUp, ChevronDown, Pencil, QrCode, Settings } from 'lucide-react';
+import { Plus, FileText, Link as LinkIcon, Download, Trash2, X, Send, Loader2, ArrowRight, ExternalLink, MessageCircle, Paperclip, LayoutGrid, BookOpen, ChevronLeft, Calendar, BarChart3, Maximize2, Vote, Copy, Check, Globe, Lock, Pin, ChevronUp, ChevronDown, Pencil, QrCode, Settings, CopyPlus } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 // --- 유틸리티: 이미지 압축 (에러 방어 로직 추가) ---
@@ -372,6 +372,7 @@ function Board({ lecture, role, onBack }: any) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPublic, setIsPublic] = useState(lecture.isPublic !== false);
   const [allowStudentPosts, setAllowStudentPosts] = useState(!!lecture.allowStudentPosts);
+  const [editTitle, setEditTitle] = useState(lecture.title || "");
 
   useEffect(() => {
     const sq = query(collection(db, 'sections'), where('lectureId', '==', lecture.id));
@@ -402,7 +403,8 @@ function Board({ lecture, role, onBack }: any) {
   };
 
   const updateLectureSettings = async () => {
-    await updateDoc(doc(db, 'lectures', lecture.id), { isPublic, allowStudentPosts });
+    if (!editTitle.trim()) return;
+    await updateDoc(doc(db, 'lectures', lecture.id), { title: editTitle.trim(), isPublic, allowStudentPosts });
     setIsSettingsOpen(false);
   };
 
@@ -417,7 +419,7 @@ function Board({ lecture, role, onBack }: any) {
               <p className="text-slate-400 text-[8px] md:text-[10px] font-black uppercase mt-0.5 md:mt-1 tracking-widest">{lecture.instructor} • BOARD</p>
             </div>
           </div>
-          {role === 'mentor' && <button onClick={() => setIsSettingsOpen(true)} className="p-2 md:px-5 md:py-2.5 bg-slate-800 text-white rounded-xl md:rounded-2xl font-black text-sm hover:bg-slate-700 transition-all"><Settings size={20} className="md:hidden" /><span className="hidden md:inline">강좌 설정</span></button>}
+          {role === 'mentor' && <button onClick={() => { setEditTitle(lecture.title || ''); setIsSettingsOpen(true); }} className="p-2 md:px-5 md:py-2.5 bg-slate-800 text-white rounded-xl md:rounded-2xl font-black text-sm hover:bg-slate-700 transition-all"><Settings size={20} className="md:hidden" /><span className="hidden md:inline">강좌 설정</span></button>}
         </div>
         
         <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0">
@@ -450,6 +452,16 @@ function Board({ lecture, role, onBack }: any) {
           <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm text-slate-900" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-black mb-6">강좌 설정 수정</h2>
             <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">강좌명</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="강좌명을 입력하세요"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-slate-900 transition-all"
+                />
+              </div>
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={isPublic} onChange={() => setIsPublic(!isPublic)} className="w-5 h-5 accent-blue-600" /><span className="font-bold">메인 페이지 공개</span></label>
               <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" checked={allowStudentPosts} onChange={() => setAllowStudentPosts(!allowStudentPosts)} className="w-5 h-5 accent-indigo-600" /><span className="font-bold">수강생 카드 업로드 허용</span></label>
             </div>
@@ -644,6 +656,138 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
   );
 }
 
+
+// --- 카드 복사 모달 ---
+function CopyCardModal({ card, onClose }: { card: any; onClose: () => void }) {
+  const { user } = useAuthStore();
+  const [lectures, setLectures] = useState<any[]>([]);
+  const [targetLectureId, setTargetLectureId] = useState<string>(card.lectureId || '');
+  const [sections, setSections] = useState<any[]>([]);
+  const [targetSectionId, setTargetSectionId] = useState<string>(card.sectionId || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'lectures'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(q, (s) => {
+      const fetched = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      setLectures(fetched);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!targetLectureId) {
+      setSections([]);
+      setTargetSectionId('');
+      return;
+    }
+    const sq = query(collection(db, 'sections'), where('lectureId', '==', targetLectureId));
+    const unsub = onSnapshot(sq, (s) => {
+      const fetchedSections = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      setSections(fetchedSections);
+      if (fetchedSections.length > 0) {
+        if (!fetchedSections.some(sec => sec.id === targetSectionId)) {
+          setTargetSectionId(fetchedSections[0].id);
+        }
+      } else {
+        setTargetSectionId('');
+      }
+    });
+    return () => unsub();
+  }, [targetLectureId]);
+
+  const handleCopy = async () => {
+    if (!targetLectureId || !targetSectionId) {
+      alert('복사할 강좌와 섹션을 모두 선택해 주세요.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'cards'), {
+        lectureId: targetLectureId,
+        sectionId: targetSectionId,
+        title: card.title || null,
+        content: card.content || null,
+        linkUrl: card.linkUrl || null,
+        fileUrl: card.fileUrl || null,
+        fileName: card.fileName || null,
+        fileType: card.fileType || null,
+        instructor: user?.displayName || card.instructor || '강사',
+        isPinned: false,
+        order: (card.order || 0) + 1,
+        createdAt: serverTimestamp()
+      });
+      alert('카드가 성공적으로 복사되었습니다!');
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert('카드 복사 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6" onClick={onClose}>
+      <div className="bg-white rounded-[2rem] p-8 w-full max-w-md text-slate-900 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-black">카드 복사 (다른 섹션 / 강좌)</h2>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
+        </div>
+        
+        <p className="text-xs text-slate-500 font-bold mb-6">
+          이 카드를 어느 강좌의 어떤 섹션으로 복사할지 선택하세요.
+        </p>
+
+        <div className="space-y-5">
+          <div>
+            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">대상 강좌</label>
+            <select
+              value={targetLectureId}
+              onChange={(e) => setTargetLectureId(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-sm text-slate-900 cursor-pointer"
+            >
+              {lectures.map((l) => (
+                <option key={l.id} value={l.id}>{l.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-black text-slate-400 uppercase tracking-wider mb-2">대상 섹션</label>
+            {sections.length > 0 ? (
+              <select
+                value={targetSectionId}
+                onChange={(e) => setTargetSectionId(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-bold text-sm text-slate-900 cursor-pointer"
+              >
+                {sections.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-red-500 font-bold p-3 bg-red-50 rounded-xl">선택한 강좌에 생성된 섹션이 없습니다.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-8">
+          <button
+            onClick={handleCopy}
+            disabled={isSubmitting || !targetSectionId}
+            className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-black disabled:opacity-50 hover:bg-blue-700 transition-all shadow-lg flex justify-center items-center gap-2"
+          >
+            {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : '복사 완료'}
+          </button>
+          <button onClick={onClose} className="px-6 py-3.5 bg-slate-100 text-slate-500 rounded-xl font-black hover:bg-slate-200 transition-colors">
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- 카드 (게시물) ---
 function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
   const [comments, setComments] = useState<any[]>([]);
@@ -652,6 +796,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(card.title || '');
   const [editedContent, setEditedContent] = useState(card.content || '');
+  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
   const { user } = useAuthStore();
 
   useEffect(() => {
@@ -760,6 +905,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
            <button type="submit" className="absolute right-3 top-2 text-indigo-500 hover:scale-110 active:scale-90 transition-all"><Send size={20}/></button>
         </form>
       </div>
+      {isCopyModalOpen && <CopyCardModal card={card} onClose={() => setIsCopyModalOpen(false)} />}
     </div>
   );
 }
