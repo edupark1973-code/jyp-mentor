@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, where, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -906,7 +907,10 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
            <button type="submit" className="absolute right-3 top-2 text-indigo-500 hover:scale-110 active:scale-90 transition-all"><Send size={20}/></button>
         </form>
       </div>
-      {isCopyModalOpen && <CopyCardModal card={card} onClose={() => setIsCopyModalOpen(false)} />}
+      {isCopyModalOpen && typeof document !== 'undefined' && createPortal(
+        <CopyCardModal card={card} onClose={() => setIsCopyModalOpen(false)} />,
+        document.body
+      )}
     </div>
   );
 }
