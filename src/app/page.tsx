@@ -843,7 +843,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{card.instructor}</span>
            {card.isPinned && <span className="text-[8px] font-black bg-blue-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-tighter">Pinned</span>}
          </div>
-         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+         <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-300">
            {role === 'mentor' && (
              <div className="flex items-center gap-1 mr-2 border-r pr-2 border-slate-100">
                <button onClick={togglePin} className={`p-1.5 rounded-lg transition-all ${card.isPinned ? 'text-blue-500 bg-blue-50' : 'text-slate-300 hover:bg-slate-50'}`} title="상단 고정"><Pin size={14}/></button>
@@ -854,6 +854,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
              </div>
            )}
            <button onClick={handleCopy} className={`p-2 rounded-xl transition-all ${isCopied ? 'text-green-500' : 'text-slate-200 hover:text-slate-400'}`} title="내용 복사">{isCopied ? <Check size={16}/> : <Copy size={16}/>}</button>
+           {role === 'mentor' && <button onClick={() => setIsCopyModalOpen(true)} className="p-2 rounded-xl text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="카드 복사" aria-label="카드 복사"><CopyPlus size={16}/></button>}
            {role === 'mentor' && (isEditing ? <div className="flex items-center gap-1"><button onClick={handleUpdateCard} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors" title="저장"><Check size={16}/></button><button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors" title="취소"><X size={16}/></button></div> : <button onClick={() => setIsEditing(true)} className="p-2 text-slate-200 hover:text-blue-500 transition-all" title="편집"><Pencil size={16}/></button>)}
            {role === 'mentor' && <button onClick={() => { if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'cards', card.id)) }} className="text-slate-200 hover:text-red-500 transition-all"><Trash2 size={16}/></button>}
          </div>
