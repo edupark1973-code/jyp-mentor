@@ -15,7 +15,6 @@ interface ProjectDetail {
   id: string;
   menteeId: string;
   title: string;
-  initialIdea: string;
   currentStep: number;
 }
 
@@ -47,39 +46,29 @@ const STEP_TITLES: Record<number, string> = {
 };
 
 // 텍스트 내 URL을 감지하여 클릭 가능한 링크로 전환해주는 헬퍼 컴포넌트
-function buildBusinessPlanMarkdown(project: ProjectDetail, steps: StepResult[], comments: CommentItem[]) {
+function buildBusinessPlanMarkdown(project: ProjectDetail, steps: StepResult[]) {
   const results = new Map(steps.map((step) => [step.stepNumber, step.aiOutput.trim()]));
-  const lines = [
-    `# ${project.title}`,
+  return [
+    "# " + project.title,
     '',
-    `- Project ID: ${project.id}`,
-    `- Exported: ${new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date())}`,
-    '- Document: JYP Mentor AI 7-step business plan',
+    "- 프로젝트 ID: " + project.id,
+    "- 내보낸 날짜: " + new Intl.DateTimeFormat("ko-KR", { dateStyle: "long", timeStyle: "short" }).format(new Date()),
     '',
-    '## Initial Business Idea',
+    "## Step 6. " + STEP_TITLES[6],
     '',
-    project.initialIdea || '_No initial idea was provided._',
+    results.get(6) || '_최종 사업계획서가 아직 없습니다._',
     '',
     '---',
     '',
-  ];
-
-  for (let stepNumber = 1; stepNumber <= 7; stepNumber += 1) {
-    lines.push(
-      `## Step ${stepNumber}. ${STEP_TITLES[stepNumber] ?? `Step ${stepNumber}`}`,
-      '',
-      results.get(stepNumber) || '_No content has been written for this step._',
-      '',
-      '---',
-      '',
-    );
-  }
-
-  const commentsText = comments.length > 0
-    ? comments.map((comment, index) => `### Mentor comment #${comments.length - index}\n${comment.content}`).join('\n\n')
-    : '_No mentor feedback has been added._';
-  lines.push('## Mentor Feedback', '', commentsText, '', '---', '', '_Exported from the JYP Mentor project review screen._', '');
-  return lines.join('\n');
+    "## Step 7. " + STEP_TITLES[7],
+    '',
+    results.get(7) || '_심사위원 검증 의견이 아직 없습니다._',
+    '',
+    '---',
+    '',
+    '_JYP Mentor 관리자 프로젝트 검토 화면에서 내보낸 문서입니다._',
+    '',
+  ].join('\n');
 }
 
 function AutoFormattedText({ text }: { text: string }) {
@@ -146,7 +135,6 @@ export default function MentorProjectDetailPage() {
         id: snapshot.id,
         menteeId: String(data.menteeId ?? data.userId ?? ''),
         title: String(data.title ?? data.initialIdea ?? '제목 없는 프로젝트'),
-        initialIdea: String(data.initialIdea ?? ''),
         currentStep: Number(data.currentStep ?? 1),
       };
       setProject(nextProject);
@@ -271,7 +259,7 @@ export default function MentorProjectDetailPage() {
 
   const downloadBusinessPlan = async () => {
     if (!project) return;
-    await downloadBusinessPlanDocx(buildBusinessPlanMarkdown(project, steps, commentsHistory), project.title);
+    await downloadBusinessPlanDocx(buildBusinessPlanMarkdown(project, steps), project.title);
   };
 
   if (authLoading || loading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={36} /></div>;

@@ -124,51 +124,30 @@ function AutoFormattedText({ text }: { text: string }) {
   );
 }
 
-function buildExportMarkdown({
-  project,
-  results,
-  feedback,
-  activeStep,
-  activeDraft,
-}: {
-  project: ProjectData;
-  results: Record<number, StepResult>;
-  feedback: FeedbackData | null;
-  activeStep: number;
-  activeDraft: string;
-}) {
-  const lines = [
-    `# ${project.title}`,
+function buildExportMarkdown({ project, results, activeStep, activeDraft }: { project: ProjectData; results: Record<number, StepResult>; activeStep: number; activeDraft: string }) {
+  const finalPlan = activeStep === 6 && activeDraft.trim() ? activeDraft.trim() : results[6]?.aiOutput?.trim();
+  const judgeReview = activeStep === 7 && activeDraft.trim() ? activeDraft.trim() : results[7]?.aiOutput?.trim();
+  return [
+    "# " + project.title,
     '',
-    `- 프로젝트 ID: ${project.id}`,
-    `- 내보낸 날짜: ${new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date())}`,
-    '- 문서 형식: JYP Mentor AI 7단계 사업계획서',
+    "- 프로젝트 ID: " + project.id,
+    "- 내보낸 날짜: " + new Intl.DateTimeFormat("ko-KR", { dateStyle: "long", timeStyle: "short" }).format(new Date()),
     '',
-    '## 초기 비즈니스 아이디어',
+    "## Step 6. " + STEPS[5].name,
     '',
-    project.initialIdea || '_입력된 초기 아이디어가 없습니다._',
+    finalPlan || '_최종 사업계획서가 아직 없습니다._',
     '',
     '---',
     '',
-  ];
-
-  for (const step of STEPS) {
-    const result = results[step.number];
-    const output = step.number === activeStep && activeDraft.trim()
-      ? activeDraft.trim()
-      : result?.aiOutput?.trim();
-
-    lines.push(`## Step ${step.number}. ${step.name}`, '', `> 전문가: ${step.persona}`, '', output || '_아직 생성하거나 저장한 초안이 없습니다._', '', '---', '');
-  }
-
-  const commentsText = feedback?.comments && feedback.comments.length > 0
-    ? feedback.comments.map((c, i) => `### 코멘트 #${feedback.comments!.length - i}\n${c.content}`).join('\n\n')
-    : feedback?.mentorComment?.trim() || '_아직 등록된 멘토 코멘트가 없습니다._';
-
-  lines.push('## 멘토 피드백', '', commentsText);
-  lines.push('', '---', '', '_본 문서는 JYP Mentor AI 사업계획서 워크스페이스에서 생성되었습니다._', '');
-
-  return lines.join('\n');
+    "## Step 7. " + STEPS[6].name,
+    '',
+    judgeReview || '_심사위원 검증 의견이 아직 없습니다._',
+    '',
+    '---',
+    '',
+    '_JYP Mentor AI 사업계획서 워크스페이스에서 내보낸 문서입니다._',
+    '',
+  ].join('\n');
 }
 
 function ProjectEntry({ userId }: { userId: string }) {
@@ -522,7 +501,6 @@ function WorkspaceContent() {
   const getExportMarkdown = () => project ? buildExportMarkdown({
     project,
     results,
-    feedback,
     activeStep,
     activeDraft: draft,
   }) : '';
