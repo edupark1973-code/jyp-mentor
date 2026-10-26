@@ -141,7 +141,7 @@ export default function MentorDashboardPage() {
                   <tr key={project.id} onClick={() => router.push(`/admin/projects/${project.id}`)} className="cursor-pointer transition hover:bg-blue-50/60">
                     <td className="px-6 py-5"><p className="font-black text-slate-900">{mentee?.displayName || '이름 미등록'}</p><p className="mt-1 text-xs text-slate-500">{mentee?.email || '이메일 미등록'}</p></td>
                     <td className="px-6 py-5 font-bold text-slate-700">{project.title}</td>
-                    <td className="px-6 py-5"><span className="rounded-full bg-blue-100 px-3 py-1.5 text-xs font-black text-blue-700">STEP {project.currentStep} / 7</span></td>
+                    <td className="w-36 whitespace-nowrap px-6 py-5"><span className="inline-flex whitespace-nowrap rounded-full bg-blue-100 px-3 py-1.5 text-xs font-black text-blue-700">STEP {project.currentStep} / 7</span></td>
                     <td className="px-6 py-5 text-sm text-slate-500">{formatTimestamp(project.updatedAt)}</td>
                     <td className="px-6 py-5"><div className="flex items-center justify-end gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); void hideProject(project); }} disabled={Boolean(deletingId)} aria-label={`${project.title} 내 목록에서 숨기기`} title="내 목록에서 숨기기" className="rounded-xl p-2 text-slate-400 transition hover:bg-amber-50 hover:text-amber-600 disabled:opacity-40">{deletingId === project.id ? <Loader2 className="animate-spin" size={18} /> : <EyeOff size={18} />}</button><ArrowRight className="text-blue-600" size={18} /></div></td>
                   </tr>

@@ -234,7 +234,7 @@ function HomeContent() {
           </div>
         )}
 
-        {role === 'mentee' && user && (
+        {(role === 'mentee' || role === 'mentor') && user && (
           <button
             type="button"
             onClick={() => router.push('/ai/workspace')}

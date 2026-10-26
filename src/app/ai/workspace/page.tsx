@@ -379,15 +379,11 @@ function WorkspaceContent() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!authLoading && role === 'mentor') router.replace('/admin/dashboard');
-  }, [authLoading, role, router]);
-
-  useEffect(() => {
     initializedRef.current = false;
     generatingStepRef.current = null;
     attemptedStepsRef.current.clear();
     setResultsLoaded(false);
-    if (!projectId || !user || role !== 'mentee') return;
+    if (!projectId || !user || (role !== 'mentee' && role !== 'mentor')) return;
     setLoading(true);
     const projectRef = doc(db, 'projects', projectId);
     const unsubscribeProject = onSnapshot(projectRef, (snapshot) => {
@@ -580,7 +576,7 @@ function WorkspaceContent() {
 
   if (authLoading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={36} /></div>;
   if (!user) return <div className="mx-auto max-w-xl px-6 py-24 text-center"><AlertCircle className="mx-auto text-blue-600" size={42} /><h1 className="mt-5 text-2xl font-black">로그인이 필요합니다</h1><p className="mt-2 text-slate-500">상단 메뉴에서 로그인한 뒤 워크스페이스를 이용해 주세요.</p></div>;
-  if (role !== 'mentee') return null;
+  if (role !== 'mentee' && role !== 'mentor') return null;
   if (!projectId) return <ProjectEntry userId={user.uid} />;
   if (loading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={36} /></div>;
   if (!project) return <div className="mx-auto max-w-xl p-12 text-center font-bold text-red-600">{error || '프로젝트를 불러오지 못했습니다.'}</div>;

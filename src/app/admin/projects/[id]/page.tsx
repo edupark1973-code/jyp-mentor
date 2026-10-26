@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { collection, deleteField, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, Timestamp, where } from 'firebase/firestore';
-import { ArrowLeft, ChevronDown, ChevronUp, Loader2, Mail, Plus, Save, Clock, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, Download, Loader2, Mail, Plus, Save, Clock, ExternalLink } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { sendMentorFeedbackNotification } from '@/lib/notifications';
+import { downloadBusinessPlanDocx } from '@/lib/exportBusinessPlanDocx';
 import MarkdownDocument from '@/components/MarkdownDocument';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -14,6 +15,7 @@ interface ProjectDetail {
   id: string;
   menteeId: string;
   title: string;
+  initialIdea: string;
   currentStep: number;
 }
 
@@ -45,6 +47,41 @@ const STEP_TITLES: Record<number, string> = {
 };
 
 // 텍스트 내 URL을 감지하여 클릭 가능한 링크로 전환해주는 헬퍼 컴포넌트
+function buildBusinessPlanMarkdown(project: ProjectDetail, steps: StepResult[], comments: CommentItem[]) {
+  const results = new Map(steps.map((step) => [step.stepNumber, step.aiOutput.trim()]));
+  const lines = [
+    `# ${project.title}`,
+    '',
+    `- Project ID: ${project.id}`,
+    `- Exported: ${new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date())}`,
+    '- Document: JYP Mentor AI 7-step business plan',
+    '',
+    '## Initial Business Idea',
+    '',
+    project.initialIdea || '_No initial idea was provided._',
+    '',
+    '---',
+    '',
+  ];
+
+  for (let stepNumber = 1; stepNumber <= 7; stepNumber += 1) {
+    lines.push(
+      `## Step ${stepNumber}. ${STEP_TITLES[stepNumber] ?? `Step ${stepNumber}`}`,
+      '',
+      results.get(stepNumber) || '_No content has been written for this step._',
+      '',
+      '---',
+      '',
+    );
+  }
+
+  const commentsText = comments.length > 0
+    ? comments.map((comment, index) => `### Mentor comment #${comments.length - index}\n${comment.content}`).join('\n\n')
+    : '_No mentor feedback has been added._';
+  lines.push('## Mentor Feedback', '', commentsText, '', '---', '', '_Exported from the JYP Mentor project review screen._', '');
+  return lines.join('\n');
+}
+
 function AutoFormattedText({ text }: { text: string }) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
@@ -109,6 +146,7 @@ export default function MentorProjectDetailPage() {
         id: snapshot.id,
         menteeId: String(data.menteeId ?? data.userId ?? ''),
         title: String(data.title ?? data.initialIdea ?? '제목 없는 프로젝트'),
+        initialIdea: String(data.initialIdea ?? ''),
         currentStep: Number(data.currentStep ?? 1),
       };
       setProject(nextProject);
@@ -231,6 +269,11 @@ export default function MentorProjectDetailPage() {
     }
   };
 
+  const downloadBusinessPlan = async () => {
+    if (!project) return;
+    await downloadBusinessPlanDocx(buildBusinessPlanMarkdown(project, steps, commentsHistory), project.title);
+  };
+
   if (authLoading || loading) return <div className="flex min-h-[60vh] items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={36} /></div>;
   if (role !== 'mentor') return null;
   if (!project) return <div className="mx-auto max-w-3xl p-10 text-center font-bold text-red-600">{error || '프로젝트를 찾을 수 없습니다.'}</div>;
@@ -242,7 +285,10 @@ export default function MentorProjectDetailPage() {
           <Link href="/admin/dashboard" className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-slate-400 hover:text-white"><ArrowLeft size={17} /> 통합 대시보드</Link>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div><p className="text-xs font-black uppercase tracking-[0.2em] text-blue-400">Project Review Room</p><h1 className="mt-2 text-3xl font-black">{project.title}</h1><p className="mt-3 text-sm text-slate-400">{mentee?.displayName} · {mentee?.email || '이메일 미등록'}</p></div>
-            <span className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black">STEP {project.currentStep} / 7</span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex w-fit shrink-0 whitespace-nowrap rounded-full bg-blue-600 px-4 py-2 text-sm font-black">STEP {project.currentStep} / 7</span>
+              {steps.some((step) => step.stepNumber === 6 && step.aiOutput.trim()) && <button type="button" onClick={() => void downloadBusinessPlan()} className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-emerald-700"><Download size={17} /> 사업계획서 다운로드</button>}
+            </div>
           </div>
         </header>
 
