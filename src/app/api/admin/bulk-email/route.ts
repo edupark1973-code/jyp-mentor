@@ -34,10 +34,12 @@ export async function POST(request: Request) {
       return Response.json({ error: '제목은 200자, 내용은 30,000자 이하로 입력해 주세요.' }, { status: 400 });
     }
 
-    const userSnapshot = await adminDb.collection('users').get();
-    const recipients = Array.from(new Set(userSnapshot.docs
+    const userSnapshot = await adminDb.collection('users').get() as {
+      docs: Array<{ data: () => Record<string, unknown> }>;
+    };
+    const recipients: string[] = [...new Set<string>(userSnapshot.docs
       .map((userDoc) => String(userDoc.data().email ?? '').trim().toLowerCase())
-      .filter((email) => EMAIL_PATTERN.test(email))));
+      .filter((email) => EMAIL_PATTERN.test(email)))];
 
     if (recipients.length === 0) {
       return Response.json({ error: '메일을 받을 수 있는 사용자 이메일이 없습니다.' }, { status: 422 });
