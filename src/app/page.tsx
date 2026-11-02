@@ -418,9 +418,34 @@ function Board({ lecture, role, onBack }: any) {
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [previewMedia, setPreviewMedia] = useState<{url: string, type: string} | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isInviteQrOpen, setIsInviteQrOpen] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const [isPublic, setIsPublic] = useState(lecture.isPublic !== false);
   const [allowStudentPosts, setAllowStudentPosts] = useState(!!lecture.allowStudentPosts);
   const [editTitle, setEditTitle] = useState(lecture.title || "");
+
+  const handleInviteLink = async () => {
+    const link = `${window.location.origin}/?id=${lecture.id}`;
+    setInviteUrl(link);
+    setIsInviteQrOpen(true);
+    setInviteLinkCopied(false);
+    try {
+      await navigator.clipboard.writeText(link);
+      setInviteLinkCopied(true);
+    } catch {
+      setInviteLinkCopied(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isInviteQrOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsInviteQrOpen(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [isInviteQrOpen]);
 
   useEffect(() => {
     const sq = query(collection(db, 'sections'), where('lectureId', '==', lecture.id));
@@ -495,7 +520,7 @@ function Board({ lecture, role, onBack }: any) {
         </div>
         
         <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-1 -mx-4 px-4 md:mx-0 md:px-0">
-          <button onClick={() => { const link = `${window.location.origin}/?id=${lecture.id}`; navigator.clipboard.writeText(link); alert('복사되었습니다!'); }} className="px-4 py-2 md:px-5 md:py-2.5 bg-slate-700 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"><LinkIcon size={14} /> <span className="hidden md:inline">초대 링크</span> 복사</button>
+          <button onClick={() => void handleInviteLink()} className="px-4 py-2 md:px-5 md:py-2.5 bg-slate-700 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-slate-600 active:scale-95 whitespace-nowrap"><LinkIcon size={14} /> <span className="hidden md:inline">초대 링크</span> 복사</button>
           <button onClick={() => window.open(`/lecture/live?id=${lecture.id}`, '_blank')} className="px-4 py-2 md:px-5 md:py-2.5 bg-indigo-600 text-white rounded-xl md:rounded-2xl font-black text-[10px] md:text-sm flex items-center gap-2 transition-all shadow-lg hover:bg-indigo-700 active:scale-95 whitespace-nowrap"><Maximize2 size={14} /> 라이브</button>
           {role === 'mentor' && (
             <>
@@ -505,6 +530,33 @@ function Board({ lecture, role, onBack }: any) {
           )}
         </div>
       </header>
+
+      {isInviteQrOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setIsInviteQrOpen(false); }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="invite-qr-title"
+        >
+          <div className="relative w-full max-w-xl rounded-[2rem] bg-white p-6 text-center text-slate-950 shadow-2xl sm:p-10">
+            <button type="button" onClick={() => setIsInviteQrOpen(false)} aria-label="초대 QR 팝업 닫기" className="absolute right-4 top-4 rounded-full bg-slate-100 p-2.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-950">
+              <X size={22} />
+            </button>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-600">Course Invite</p>
+            <h2 id="invite-qr-title" className="mt-2 text-2xl font-black sm:text-3xl">강좌 초대 QR</h2>
+            <p className="mt-3 text-sm font-semibold text-slate-500">QR코드를 스캔하면 이 강좌 보드로 이동합니다.</p>
+            <div className="mx-auto mt-6 aspect-square w-full max-w-[420px] rounded-3xl border-8 border-slate-950 bg-white p-4 sm:p-6">
+              {inviteUrl && <QRCodeSVG value={inviteUrl} level="H" size={420} className="h-full w-full" />}
+            </div>
+            <p className="mx-auto mt-5 max-w-md break-all rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600">{inviteUrl}</p>
+            <div className="mt-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+              <p className="text-xs font-bold text-slate-500">{inviteLinkCopied ? '초대 링크가 클립보드에 복사되었습니다.' : '링크를 복사할 수 없으면 주소를 길게 눌러 복사하세요.'}</p>
+              <button type="button" onClick={() => void handleInviteLink()} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-blue-700">링크 다시 복사</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 섹션 탭 (모바일 전용) */}
       <div className="md:hidden flex bg-slate-900 border-b border-white/5 overflow-x-auto custom-scrollbar px-4 pt-4 gap-2">

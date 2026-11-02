@@ -4,7 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
-import { ShieldCheck, UserCog, Loader2, ChevronLeft, Search } from 'lucide-react';
+import { ShieldCheck, UserCog, Loader2, ChevronLeft, Search, Download, Mail, Send, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 type UserRecord = {
@@ -54,6 +54,11 @@ function AdminUserContent() {
   const { user, role, loading: authLoading } = useAuthStore();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isMailModalOpen, setIsMailModalOpen] = useState(false);
+  const [mailSubject, setMailSubject] = useState('');
+  const [mailBody, setMailBody] = useState('');
+  const [isSendingMail, setIsSendingMail] = useState(false);
+  const [mailSuccess, setMailSuccess] = useState('');
 
   useEffect(() => {
     if (authLoading) return;
@@ -100,13 +105,110 @@ function AdminUserContent() {
     u.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const recipientCount = new Set(users
+    .map((target) => target.email?.trim().toLowerCase() ?? '')
+    .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))).size;
+  const canSendBulkEmail = user?.email?.trim().toLowerCase() === 'edupark1973@gmail.com';
+
+  const downloadRoster = async () => {
+    const rows = [
+      ['사용자 ID', '이름', '이메일', '권한', '가입일'],
+      ...users.map((target) => [
+        target.id,
+        target.displayName || '',
+        target.email || '',
+        target.role === 'mentor' ? '강사' : '수강생',
+        formatCreatedAt(target.createdAt),
+      ]),
+    ];
+    const escapeXml = (value: string) => value
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+    const columnName = (columnNumber: number) => {
+      let name = '';
+      let number = columnNumber;
+      while (number > 0) {
+        const remainder = (number - 1) % 26;
+        name = String.fromCharCode(65 + remainder) + name;
+        number = Math.floor((number - 1) / 26);
+      }
+      return name;
+    };
+    const sheetRows = rows.map((row, rowIndex) => {
+      const cells = row.map((value, columnIndex) => {
+        const cellRef = `${columnName(columnIndex + 1)}${rowIndex + 1}`;
+        return `<c r="${cellRef}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
+      }).join('');
+      return `<row r="${rowIndex + 1}">${cells}</row>`;
+    }).join('');
+
+    const zipModule = await import('jszip');
+    const zip = new zipModule.default();
+    zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+    zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+    zip.file('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="사용자 명단" sheetId="1" r:id="rId1"/></sheets></workbook>');
+    zip.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+    zip.file('xl/worksheets/sheet1.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`);
+
+    const workbook = await zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const blobUrl = URL.createObjectURL(workbook);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `EduReport_사용자명단_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  };
+
+  const sendBulkEmail = async () => {
+    if (!mailSubject.trim() || !mailBody.trim()) {
+      alert('메일 제목과 내용을 입력해 주세요.');
+      return;
+    }
+    if (recipientCount === 0) {
+      alert('메일을 받을 수 있는 사용자 이메일이 없습니다.');
+      return;
+    }
+    if (!confirm(`이메일 주소가 등록된 사용자 ${recipientCount}명에게 단체 메일을 보내시겠습니까?`)) return;
+
+    setIsSendingMail(true);
+    setMailSuccess('');
+    try {
+      const token = await user?.getIdToken();
+      if (!token) throw new Error('로그인이 필요합니다. 다시 로그인해 주세요.');
+      const response = await fetch('/api/admin/bulk-email', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ subject: mailSubject, text: mailBody }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || '단체 메일 발송에 실패했습니다.');
+      setMailSuccess(`${result.recipients}명에게 메일 발송 대기열을 등록했습니다.`);
+      setMailSubject('');
+      setMailBody('');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : '단체 메일 발송에 실패했습니다.');
+    } finally {
+      setIsSendingMail(false);
+    }
+  };
+
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-white"><Loader2 className="animate-spin text-blue-600" /></div>;
   if (role !== 'mentor') return null;
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 text-slate-900">
       <div className="max-w-4xl mx-auto">
-        <header className="flex justify-between items-center mb-10">
+        <header className="mb-10 flex flex-col gap-5">
           <div className="flex items-center gap-4">
             <button onClick={() => router.push('/')} className="p-3 bg-white rounded-2xl shadow-sm hover:bg-slate-100 transition-all">
               <ChevronLeft size={20} />
@@ -115,8 +217,18 @@ function AdminUserContent() {
               <UserCog className="text-blue-600" size={32} /> 강사 및 사용자 관리
             </h1>
           </div>
-          <div className="px-5 py-2 bg-blue-600 text-white rounded-full font-black text-sm shadow-lg shadow-blue-100">
-            총 {users.length}명 가입됨
+          <div className="flex flex-wrap items-center justify-start gap-2">
+            <button type="button" onClick={downloadRoster} className="flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-100">
+              <Download size={17} /> 명단 엑셀 다운로드
+            </button>
+            {canSendBulkEmail && (
+              <button type="button" onClick={() => { setMailSuccess(''); setIsMailModalOpen(true); }} className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700">
+                <Mail size={17} /> 단체 메일
+              </button>
+            )}
+            <div className="px-5 py-2 bg-blue-600 text-white rounded-full font-black text-sm shadow-lg shadow-blue-100">
+              총 {users.length}명 가입됨
+            </div>
           </div>
         </header>
 
@@ -185,6 +297,38 @@ function AdminUserContent() {
             <div className="py-20 text-center text-slate-300 font-bold italic">검색 결과가 없습니다.</div>
           )}
         </div>
+
+        {isMailModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSendingMail) setIsMailModalOpen(false); }}>
+            <div role="dialog" aria-modal="true" aria-labelledby="bulk-mail-title" className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
+              <button type="button" onClick={() => setIsMailModalOpen(false)} disabled={isSendingMail} aria-label="단체 메일 작성 닫기" className="absolute right-5 top-5 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40"><X size={20} /></button>
+              <div className="pr-10">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Admin Email</p>
+                <h2 id="bulk-mail-title" className="mt-2 text-2xl font-black text-slate-950">사용자 단체 메일</h2>
+                <p className="mt-2 text-sm font-semibold text-slate-500">관리자 Google 메일 주소로 이메일이 등록된 사용자 {recipientCount}명에게 숨은 참조로 발송합니다.</p>
+              </div>
+              <div className="mt-6 space-y-4">
+                <div>
+                  <label htmlFor="bulk-mail-subject" className="mb-2 block text-xs font-black text-slate-500">메일 제목</label>
+                  <input id="bulk-mail-subject" value={mailSubject} onChange={(event) => setMailSubject(event.target.value)} maxLength={200} className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 font-semibold text-slate-900 outline-none transition focus:border-blue-500" placeholder="메일 제목을 입력하세요" />
+                </div>
+                <div>
+                  <label htmlFor="bulk-mail-body" className="mb-2 block text-xs font-black text-slate-500">메일 내용</label>
+                  <textarea id="bulk-mail-body" value={mailBody} onChange={(event) => setMailBody(event.target.value)} maxLength={30000} rows={10} className="w-full resize-y rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium leading-6 text-slate-900 outline-none transition focus:border-blue-500" placeholder="메일 내용을 입력하세요" />
+                  <p className="mt-1 text-right text-xs font-semibold text-slate-400">{mailBody.length.toLocaleString()} / 30,000자</p>
+                </div>
+              </div>
+              {mailSuccess && <p role="status" className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{mailSuccess}</p>}
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setIsMailModalOpen(false)} disabled={isSendingMail} className="rounded-xl bg-slate-100 px-5 py-3 font-black text-slate-600 transition hover:bg-slate-200 disabled:opacity-50">닫기</button>
+                <button type="button" onClick={() => void sendBulkEmail()} disabled={isSendingMail || !mailSubject.trim() || !mailBody.trim() || recipientCount === 0} className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+                  {isSendingMail ? <Loader2 className="animate-spin" size={18} /> : <Send size={17} />}
+                  {isSendingMail ? '발송 대기열 등록 중...' : `${recipientCount}명에게 보내기`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
