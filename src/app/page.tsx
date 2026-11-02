@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, where, getDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, serverTimestamp, where, getDoc, getDocs, updateDoc, writeBatch } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -378,7 +378,10 @@ function Board({ lecture, role, onBack }: any) {
   useEffect(() => {
     const sq = query(collection(db, 'sections'), where('lectureId', '==', lecture.id));
     const unsubS = onSnapshot(sq, (s) => {
-      const fetchedSections = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      const chronologicalSections = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      const fetchedSections = chronologicalSections
+        .map((section: any, index) => ({ ...section, order: typeof section.order === 'number' ? section.order : index }))
+        .sort((a: any, b: any) => a.order - b.order);
       setSections(fetchedSections);
       if (fetchedSections.length > 0 && !activeSectionId) {
         setActiveSectionId(fetchedSections[0].id);
@@ -398,9 +401,30 @@ function Board({ lecture, role, onBack }: any) {
 
   const addSection = async () => {
     if (!newSectionTitle.trim()) return;
-    const docRef = await addDoc(collection(db, 'sections'), { lectureId: lecture.id, title: newSectionTitle, createdAt: serverTimestamp() });
+    const nextOrder = sections.length > 0 ? Math.max(...sections.map((section: any) => section.order)) + 1 : 0;
+    const docRef = await addDoc(collection(db, 'sections'), { lectureId: lecture.id, title: newSectionTitle.trim(), order: nextOrder, createdAt: serverTimestamp() });
     setNewSectionTitle(''); setIsAddingSection(false);
     setActiveSectionId(docRef.id);
+  };
+
+  const renameSection = async (sectionId: string, title: string) => {
+    if (!title.trim()) return;
+    await updateDoc(doc(db, 'sections', sectionId), { title: title.trim() });
+  };
+
+  const handleMoveSection = async (sectionId: string, direction: 'up' | 'down') => {
+    if (role !== 'mentor') return;
+    const currentIndex = sections.findIndex((section: any) => section.id === sectionId);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= sections.length) return;
+
+    const reorderedSections = [...sections];
+    [reorderedSections[currentIndex], reorderedSections[targetIndex]] = [reorderedSections[targetIndex], reorderedSections[currentIndex]];
+    const batch = writeBatch(db);
+    reorderedSections.forEach((section: any, index) => {
+      batch.update(doc(db, 'sections', section.id), { order: index });
+    });
+    await batch.commit();
   };
 
   const updateLectureSettings = async () => {
@@ -473,9 +497,18 @@ function Board({ lecture, role, onBack }: any) {
 
       <main className="flex-1 overflow-x-auto md:p-8 flex md:gap-8 items-start custom-scrollbar">
         {/* 데스크톱: 가로 나열 / 모바일: 선택된 섹션만 노출 */}
-        {sections.map(section => (
+        {sections.map((section, sectionIndex) => (
           <div key={section.id} className={`${activeSectionId === section.id ? 'block w-full' : 'hidden'} md:block md:w-80 md:flex-shrink-0`}>
-            <Section section={section} lecture={lecture} cards={cards.filter(c => c.sectionId === section.id)} role={role} onPreview={setPreviewMedia} />
+            <Section
+              section={section}
+              lecture={lecture}
+              cards={cards.filter(c => c.sectionId === section.id)}
+              role={role}
+              onPreview={setPreviewMedia}
+              onRename={renameSection}
+              onMoveUp={sectionIndex > 0 ? () => handleMoveSection(section.id, 'up') : null}
+              onMoveDown={sectionIndex < sections.length - 1 ? () => handleMoveSection(section.id, 'down') : null}
+            />
           </div>
         ))}
         {isAddingSection && (
@@ -514,8 +547,10 @@ function Board({ lecture, role, onBack }: any) {
 }
 
 // --- 섹션 (리스트) ---
-function Section({ section, lecture, cards, role, onPreview }: any) {
+function Section({ section, lecture, cards, role, onPreview, onRename, onMoveUp, onMoveDown }: any) {
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditingSectionTitle, setIsEditingSectionTitle] = useState(false);
+  const [editedSectionTitle, setEditedSectionTitle] = useState(section.title || '');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
@@ -524,6 +559,12 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
   const [showLinkInput, setShowLinkInput] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const { user } = useAuthStore();
+
+  const saveSectionTitle = async () => {
+    if (!editedSectionTitle.trim()) return;
+    await onRename(section.id, editedSectionTitle);
+    setIsEditingSectionTitle(false);
+  };
 
   const handleDeleteSection = async () => {
     if (confirm('섹션을 삭제하시겠습니까? (내부 카드도 모두 삭제됩니다)')) {
@@ -593,10 +634,40 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
   }
 
   return (
-    <div className="w-80 flex-shrink-0 flex flex-col max-h-full">
+    <div className="mx-auto w-80 max-w-full flex-shrink-0 flex flex-col max-h-full md:mx-0">
       <div className="flex justify-between items-center mb-6 px-3">
-        <h3 className="text-white font-black text-xl tracking-tight text-slate-200">{section.title}</h3>
-        {role === 'mentor' && <button onClick={handleDeleteSection} className="text-slate-600 hover:text-red-400 transition-colors"><Trash2 size={18} /></button>}
+        {isEditingSectionTitle ? (
+          <input
+            autoFocus
+            value={editedSectionTitle}
+            onChange={event => setEditedSectionTitle(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter') void saveSectionTitle();
+              if (event.key === 'Escape') { setEditedSectionTitle(section.title || ''); setIsEditingSectionTitle(false); }
+            }}
+            aria-label="섹션 이름"
+            className="min-w-0 flex-1 rounded-lg border border-white/20 bg-white/10 px-2 py-1 text-lg font-black text-white outline-none focus:border-pink-500"
+          />
+        ) : (
+          <h3 className="min-w-0 flex-1 truncate text-xl font-black tracking-tight text-slate-200">{section.title}</h3>
+        )}
+        {role === 'mentor' && (
+          <div className="ml-2 flex shrink-0 items-center gap-1">
+            {isEditingSectionTitle ? (
+              <>
+                <button type="button" onClick={() => void saveSectionTitle()} aria-label="섹션 이름 저장" title="저장" className="rounded-lg p-1 text-emerald-400 transition-colors hover:bg-white/10"><Check size={16} /></button>
+                <button type="button" onClick={() => { setEditedSectionTitle(section.title || ''); setIsEditingSectionTitle(false); }} aria-label="섹션 이름 수정 취소" title="취소" className="rounded-lg p-1 text-slate-400 transition-colors hover:bg-white/10"><X size={16} /></button>
+              </>
+            ) : (
+              <>
+                {onMoveUp && <button type="button" onClick={onMoveUp} aria-label="섹션 위로 이동" title="위로 이동" className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"><ChevronUp size={16} /></button>}
+                {onMoveDown && <button type="button" onClick={onMoveDown} aria-label="섹션 아래로 이동" title="아래로 이동" className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-white"><ChevronDown size={16} /></button>}
+                <button type="button" onClick={() => { setEditedSectionTitle(section.title || ''); setIsEditingSectionTitle(true); }} aria-label="섹션 이름 수정" title="이름 수정" className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-pink-400"><Pencil size={15} /></button>
+                <button type="button" onClick={handleDeleteSection} aria-label="섹션 삭제" title="섹션 삭제" className="rounded-lg p-1 text-slate-600 transition-colors hover:text-red-400"><Trash2 size={16} /></button>
+              </>
+            )}
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto space-y-5 pr-3 custom-scrollbar text-slate-900 pb-20">
         {canAddCard && !isAdding && (
@@ -659,7 +730,7 @@ function Section({ section, lecture, cards, role, onPreview }: any) {
 
 
 // --- 카드 복사 모달 ---
-function CopyCardModal({ card, onClose }: { card: any; onClose: () => void }) {
+function CopyCardModal({ card, mode, onClose }: { card: any; mode: 'copy' | 'move'; onClose: () => void }) {
   const { user } = useAuthStore();
   const [lectures, setLectures] = useState<any[]>([]);
   const [targetLectureId, setTargetLectureId] = useState<string>(card.lectureId || '');
@@ -684,7 +755,10 @@ function CopyCardModal({ card, onClose }: { card: any; onClose: () => void }) {
     }
     const sq = query(collection(db, 'sections'), where('lectureId', '==', targetLectureId));
     const unsub = onSnapshot(sq, (s) => {
-      const fetchedSections = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      const chronologicalSections = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      const fetchedSections = chronologicalSections
+        .map((section: any, index) => ({ ...section, order: typeof section.order === 'number' ? section.order : index }))
+        .sort((a: any, b: any) => a.order - b.order);
       setSections(fetchedSections);
       if (fetchedSections.length > 0) {
         if (!fetchedSections.some(sec => sec.id === targetSectionId)) {
@@ -728,16 +802,40 @@ function CopyCardModal({ card, onClose }: { card: any; onClose: () => void }) {
     }
   };
 
+  const handleMove = async () => {
+    if (!targetLectureId || !targetSectionId) return;
+    if (targetSectionId === card.sectionId) {
+      alert('현재 섹션과 다른 섹션을 선택해 주세요.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const targetCards = await getDocs(query(collection(db, 'cards'), where('sectionId', '==', targetSectionId)));
+      const nextOrder = targetCards.docs.reduce((maxOrder, cardDoc) => {
+        const order = cardDoc.data().order;
+        return Math.max(maxOrder, typeof order === 'number' ? order : -1);
+      }, -1) + 1;
+      await updateDoc(doc(db, 'cards', card.id), { lectureId: targetLectureId, sectionId: targetSectionId, order: nextOrder });
+      alert('카드를 이동했습니다.');
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert('카드 이동 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6" onClick={onClose}>
       <div className="bg-white rounded-[2rem] p-8 w-full max-w-md text-slate-900 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-black">카드 복사 (다른 섹션 / 강좌)</h2>
+          <h2 className="text-xl font-black">{mode === 'move' ? '카드 이동' : '카드 복사 (다른 섹션 / 강좌)'}</h2>
           <button onClick={onClose} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={20} /></button>
         </div>
         
         <p className="text-xs text-slate-500 font-bold mb-6">
-          이 카드를 어느 강좌의 어떤 섹션으로 복사할지 선택하세요.
+          {mode === 'move' ? '카드를 이동할 강좌와 섹션을 선택하세요.' : '이 카드를 어느 강좌의 어떤 섹션으로 복사할지 선택하세요.'}
         </p>
 
         <div className="space-y-5">
@@ -774,11 +872,11 @@ function CopyCardModal({ card, onClose }: { card: any; onClose: () => void }) {
 
         <div className="flex gap-3 mt-8">
           <button
-            onClick={handleCopy}
-            disabled={isSubmitting || !targetSectionId}
+            onClick={mode === 'move' ? handleMove : handleCopy}
+            disabled={isSubmitting || !targetSectionId || (mode === 'move' && targetSectionId === card.sectionId)}
             className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-black disabled:opacity-50 hover:bg-blue-700 transition-all shadow-lg flex justify-center items-center gap-2"
           >
-            {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : '복사 완료'}
+            {isSubmitting ? <Loader2 className="animate-spin" size={18} /> : mode === 'move' ? '카드 이동' : '복사 완료'}
           </button>
           <button onClick={onClose} className="px-6 py-3.5 bg-slate-100 text-slate-500 rounded-xl font-black hover:bg-slate-200 transition-colors">
             취소
@@ -797,7 +895,7 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(card.title || '');
   const [editedContent, setEditedContent] = useState(card.content || '');
-  const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
+  const [transferMode, setTransferMode] = useState<'copy' | 'move' | null>(null);
   const { user } = useAuthStore();
 
   useEffect(() => {
@@ -855,7 +953,8 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
              </div>
            )}
            <button onClick={handleCopy} className={`p-2 rounded-xl transition-all ${isCopied ? 'text-green-500' : 'text-slate-200 hover:text-slate-400'}`} title="내용 복사">{isCopied ? <Check size={16}/> : <Copy size={16}/>}</button>
-           {role === 'mentor' && <button onClick={() => setIsCopyModalOpen(true)} className="p-2 rounded-xl text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="카드 복사" aria-label="카드 복사"><CopyPlus size={16}/></button>}
+           {role === 'mentor' && <button onClick={() => setTransferMode('copy')} className="p-2 rounded-xl text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="카드 복사" aria-label="카드 복사"><CopyPlus size={16}/></button>}
+           {role === 'mentor' && <button onClick={() => setTransferMode('move')} className="p-2 rounded-xl text-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all" title="카드 이동" aria-label="카드 이동"><ArrowRight size={16}/></button>}
            {role === 'mentor' && (isEditing ? <div className="flex items-center gap-1"><button onClick={handleUpdateCard} className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-colors" title="저장"><Check size={16}/></button><button onClick={() => setIsEditing(false)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-xl transition-colors" title="취소"><X size={16}/></button></div> : <button onClick={() => setIsEditing(true)} className="p-2 text-slate-200 hover:text-blue-500 transition-all" title="편집"><Pencil size={16}/></button>)}
            {role === 'mentor' && <button onClick={() => { if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'cards', card.id)) }} className="text-slate-200 hover:text-red-500 transition-all"><Trash2 size={16}/></button>}
          </div>
@@ -907,8 +1006,8 @@ function Card({ card, role, onPreview, onMoveUp, onMoveDown }: any) {
            <button type="submit" className="absolute right-3 top-2 text-indigo-500 hover:scale-110 active:scale-90 transition-all"><Send size={20}/></button>
         </form>
       </div>
-      {isCopyModalOpen && typeof document !== 'undefined' && createPortal(
-        <CopyCardModal card={card} onClose={() => setIsCopyModalOpen(false)} />,
+      {transferMode && typeof document !== 'undefined' && createPortal(
+        <CopyCardModal card={card} mode={transferMode} onClose={() => setTransferMode(null)} />,
         document.body
       )}
     </div>
