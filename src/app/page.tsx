@@ -147,10 +147,13 @@ function HomeContent() {
 
   const addLecture = async () => {
     if (!newLectureTitle.trim()) return;
+    const ownedLectures = lectures.filter(lecture => lecture.instructorUid === user?.uid);
+    const normalizedOrders = ownedLectures.map((lecture, index) => typeof lecture.order === 'number' ? lecture.order : index);
+    const nextOrder = normalizedOrders.length > 0 ? Math.min(...normalizedOrders) - 1 : 0;
     await addDoc(collection(db, 'lectures'), {
       title: newLectureTitle, description: newLectureDesc,
       instructor: user?.displayName || '공용 강사', instructorUid: user?.uid || 'unknown',
-      isPublic, allowStudentPosts, createdAt: serverTimestamp(),
+      isPublic, allowStudentPosts, order: nextOrder, createdAt: serverTimestamp(),
     });
     setNewLectureTitle(''); setNewLectureDesc(''); setIsAddingLecture(false); setIsPublic(true); setAllowStudentPosts(false);
   };
@@ -172,6 +175,28 @@ function HomeContent() {
     }
   };
 
+  const ownedWorkspaceLectures = user
+    ? lectures
+        .filter(lecture => lecture.instructorUid === user.uid)
+        .map((lecture, index) => ({ ...lecture, order: typeof lecture.order === 'number' ? lecture.order : index }))
+        .sort((a, b) => a.order - b.order)
+    : [];
+
+  const handleMoveLecture = async (lectureId: string, direction: 'up' | 'down') => {
+    if (role !== 'mentor' || !user) return;
+    const currentIndex = ownedWorkspaceLectures.findIndex(lecture => lecture.id === lectureId);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ownedWorkspaceLectures.length) return;
+
+    const reorderedLectures = [...ownedWorkspaceLectures];
+    [reorderedLectures[currentIndex], reorderedLectures[targetIndex]] = [reorderedLectures[targetIndex], reorderedLectures[currentIndex]];
+    const batch = writeBatch(db);
+    reorderedLectures.forEach((lecture, index) => {
+      batch.update(doc(db, 'lectures', lecture.id), { order: index });
+    });
+    await batch.commit();
+  };
+
   if (authLoading) return <div className="h-screen flex items-center justify-center bg-slate-900"><Loader2 className="animate-spin text-blue-600 w-12 h-12" /></div>;
 
   if (lectureId && currentLecture) {
@@ -179,7 +204,7 @@ function HomeContent() {
   }
 
   const displayLectures = role === 'mentor' && user && viewMode === 'workspace'
-    ? lectures.filter(lecture => lecture.instructorUid === user.uid)
+    ? ownedWorkspaceLectures
     : lectures.filter(lecture => lecture.isPublic !== false); 
 
   return (
@@ -261,13 +286,35 @@ function HomeContent() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
-          {displayLectures.map((lecture) => (
+          {displayLectures.map((lecture, index) => (
             <div key={lecture.id} onClick={() => router.push(`/?id=${lecture.id}`)} className="bg-white/5 p-6 md:p-10 rounded-[2rem] md:rounded-[3.5rem] border border-white/10 shadow-sm hover:shadow-2xl hover:border-blue-500/50 hover:-translate-y-2 transition-all cursor-pointer group relative overflow-hidden backdrop-blur-sm flex flex-col h-[280px] md:h-[320px]">
               {role === 'mentor' && lecture.instructorUid === user?.uid && (
                 <button onClick={(e) => { e.stopPropagation(); if(confirm('삭제하시겠습니까?')) deleteDoc(doc(db, 'lectures', lecture.id)); }} className="absolute top-6 md:top-8 right-6 md:right-8 p-2 text-slate-600 hover:text-red-500 rounded-xl transition-colors z-10"><Trash2 size={18} /></button>
               )}
               <div className="flex items-center justify-between mb-6 md:mb-8">
-                <div className="w-12 h-12 md:w-16 md:h-16 bg-white/5 rounded-xl md:rounded-[1.5rem] flex items-center justify-center text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner border border-white/5"><LayoutGrid size={24} className="md:w-8 md:h-8" /></div>
+                <div className="flex items-center gap-2">
+                  <div className="w-12 h-12 md:w-16 md:h-16 bg-white/5 rounded-xl md:rounded-[1.5rem] flex items-center justify-center text-slate-500 group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner border border-white/5"><LayoutGrid size={24} className="md:w-8 md:h-8" /></div>
+                  {role === 'mentor' && viewMode === 'workspace' && lecture.instructorUid === user?.uid && (
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); void handleMoveLecture(lecture.id, 'up'); }}
+                        disabled={index === 0}
+                        aria-label={`${lecture.title} 강좌 위로 이동`}
+                        title="강좌 위로 이동"
+                        className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-25"
+                      ><ChevronUp size={16} /></button>
+                      <button
+                        type="button"
+                        onClick={(event) => { event.stopPropagation(); void handleMoveLecture(lecture.id, 'down'); }}
+                        disabled={index === displayLectures.length - 1}
+                        aria-label={`${lecture.title} 강좌 아래로 이동`}
+                        title="강좌 아래로 이동"
+                        className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-25"
+                      ><ChevronDown size={16} /></button>
+                    </div>
+                  )}
+                </div>
                 {role === 'mentor' && <div className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[8px] md:text-[10px] font-black flex items-center gap-1 md:gap-1.5 uppercase tracking-widest ${lecture.isPublic !== false ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>{lecture.isPublic !== false ? <><Globe size={10} className="md:w-3 md:h-3"/> Public</> : <><Lock size={10} className="md:w-3 md:h-3"/> Private</>}</div>}
               </div>
               <h3 className="text-xl md:text-3xl font-black mb-3 md:mb-4 leading-tight group-hover:text-white transition-colors line-clamp-2 flex-1">{lecture.title}</h3>
