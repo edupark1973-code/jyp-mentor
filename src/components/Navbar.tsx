@@ -70,6 +70,7 @@ export default function Navbar() {
                 홈
               </button>
               <Link href="/mentoring" className={`${isActive('/mentoring') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>멘토링 예약</Link>
+              <Link href="/startup-links" className={`${isActive('/startup-links') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>창업 추천 링크</Link>
               {(role === 'mentee' || role === 'mentor') && <Link href="/ai/workspace" className={`${pathname.startsWith('/ai/workspace') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>AI 사업계획서 작성</Link>}
             </div>
           </div>
@@ -112,6 +113,7 @@ export default function Navbar() {
           <div className="flex flex-col gap-2 font-bold text-slate-600">
             <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>홈</Link>
             <Link href="/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>멘토링 예약</Link>
+            <Link href="/startup-links" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/startup-links') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>창업 추천 링크</Link>
             {(role === 'mentee' || role === 'mentor') && <Link href="/ai/workspace" onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.startsWith('/ai/workspace') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>AI 사업계획서 작성</Link>}
             {role === 'mentor' && (
               <>

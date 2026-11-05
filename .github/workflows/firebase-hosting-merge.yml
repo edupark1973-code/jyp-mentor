@@ -34,6 +34,14 @@ jobs:
           GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
           # 필요한 다른 환경변수가 있다면 여기에 추가하세요
 
+      - name: Authenticate for Firestore rules deployment
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JYP_MENTOR }}
+
+      - name: Deploy Firestore rules
+        run: npx firebase-tools deploy --only firestore:rules --project jyp-mentor --non-interactive
+
       # ✅ 웹 호스팅과 서버 엔진(Functions)을 모두 배포합니다
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0

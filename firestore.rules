@@ -126,6 +126,10 @@ service cloud.firestore {
     }
     
     match /lectures/{id} { allow read, write: if true; }
+    match /startup_links/{id} {
+      allow read: if true;
+      allow write: if isMentor();
+    }
     match /materials/{id} { allow read, write: if true; }
     match /questions/{id} { allow read, write: if true; }
   }

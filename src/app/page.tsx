@@ -205,7 +205,10 @@ function HomeContent() {
 
   const displayLectures = role === 'mentor' && user && viewMode === 'workspace'
     ? ownedWorkspaceLectures
-    : lectures.filter(lecture => lecture.isPublic !== false); 
+    : lectures
+        .filter(lecture => lecture.isPublic !== false)
+        .map((lecture, index) => ({ ...lecture, order: typeof lecture.order === 'number' ? lecture.order : index }))
+        .sort((a, b) => a.order - b.order);
 
   return (
     <div className="min-h-screen bg-slate-900 p-4 md:p-8 text-white font-sans">
