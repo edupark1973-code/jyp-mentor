@@ -76,6 +76,9 @@ service cloud.firestore {
       allow create, delete: if isMentor();
       allow update: if request.auth != null; 
     }
+    match /mentoring_slot_locks/{id} {
+      allow read, write: if isMentor();
+    }
     
     match /bookings/{bookingId} {
       allow create: if request.auth != null;

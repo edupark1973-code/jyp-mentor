@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, deleteDoc, doc, updateDoc, writeBatch, serverTimestamp, where, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc, writeBatch, serverTimestamp, where, getDocs, getDocsFromServer, runTransaction } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Plus, Trash2, Calendar, Clock, Loader2, CheckCircle, XCircle, Layers, FileText, ExternalLink, User, Mail, Ban, CheckCircle2, MessageSquareText, X, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -86,6 +86,7 @@ export default function AdminMentoringPage() {
 
   const handleBulkAddSlots = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting || role !== 'mentor' || !user) return;
     if (!newDate || !startTime || !endTime || !location.trim()) {
       alert('모든 정보를 입력해주세요.');
       return;
@@ -101,30 +102,38 @@ export default function AdminMentoringPage() {
 
     setIsSubmitting(true);
     try {
-      let current = start;
-      const promises = [];
-
-      while (current + interval <= end) {
-        const h = Math.floor(current / 60).toString().padStart(2, '0');
-        const m = (current % 60).toString().padStart(2, '0');
-        const timeString = `${h}:${m}`;
-
-        promises.push(addDoc(collection(db, 'mentoring_slots'), {
-          date: newDate,
-          time: timeString,
-          location: location.trim(),
-          duration: interval,
-          isBooked: false,
-          instructorUid: user?.uid,
-          instructorName: user?.displayName || '공용 강사',
-          createdAt: new Date().toISOString()
-        }));
-
-        current += interval;
-      }
-
-      await Promise.all(promises);
-      alert(`${promises.length}개의 슬롯이 생성되었습니다.`);
+      const slotCollection = collection(db, 'mentoring_slots');
+      const lockRef = doc(db, 'mentoring_slot_locks', `${user.uid}_${newDate}`);
+      const result = await runTransaction(db, async transaction => {
+        // 같은 강사와 날짜의 동시 생성은 잠금 문서를 통해 재시도한다.
+        await transaction.get(lockRef);
+        const existing = await getDocsFromServer(query(slotCollection, where('instructorUid', '==', user.uid), where('date', '==', newDate)));
+        const occupied = existing.docs.map(item => {
+          const data = item.data();
+          const [hour, minute] = (data.time as string).split(':').map(Number);
+          const from = hour * 60 + minute;
+          return { from, to: from + (typeof data.duration === 'number' && data.duration > 0 ? data.duration : 60) };
+        });
+        let created = 0;
+        let skipped = 0;
+        for (let current = start; current + interval <= end; current += interval) {
+          if (occupied.some(slot => current < slot.to && current + interval > slot.from)) {
+            skipped++;
+            continue;
+          }
+          const h = Math.floor(current / 60).toString().padStart(2, '0');
+          const m = (current % 60).toString().padStart(2, '0');
+          transaction.set(doc(slotCollection), {
+            date: newDate, time: `${h}:${m}`, location: location.trim(), duration: interval,
+            isBooked: false, instructorUid: user.uid, instructorName: user.displayName || '공용 강사',
+            createdAt: new Date().toISOString(),
+          });
+          created++;
+        }
+        transaction.set(lockRef, { updatedAt: serverTimestamp() });
+        return { created, skipped };
+      });
+      alert(`${result.created}개의 슬롯이 생성되었습니다.${result.skipped ? ` 시간이 겹치는 ${result.skipped}개는 건너뛰었습니다.` : ''}`);
       setSelectedDate(newDate);
     } catch (error) {
       console.error('Error adding slots:', error);
