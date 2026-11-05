@@ -72,6 +72,7 @@ export default function Navbar() {
               <Link href="/mentoring" className={`${isActive('/mentoring') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>멘토링 예약</Link>
               <Link href="/startup-links" className={`${isActive('/startup-links') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>창업 추천 링크</Link>
               <Link href="/profile" className={`${isActive('/profile') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>멘토 소개</Link>
+              <Link href="/certifications" className={`${isActive('/certifications') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors whitespace-nowrap`}>민간자격 공시</Link>
               {(role === 'mentee' || role === 'mentor') && <Link href="/ai/workspace" className={`${pathname.startsWith('/ai/workspace') ? 'text-blue-600' : 'hover:text-blue-600'} transition-colors`}>AI 사업계획서 작성</Link>}
             </div>
           </div>
@@ -116,6 +117,7 @@ export default function Navbar() {
             <Link href="/mentoring" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/mentoring') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>멘토링 예약</Link>
             <Link href="/startup-links" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/startup-links') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>창업 추천 링크</Link>
             <Link href="/profile" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/profile') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>멘토 소개</Link>
+            <Link href="/certifications" onClick={() => setIsMobileMenuOpen(false)} className={`${isActive('/certifications') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>민간자격 공시</Link>
             {(role === 'mentee' || role === 'mentor') && <Link href="/ai/workspace" onClick={() => setIsMobileMenuOpen(false)} className={`${pathname.startsWith('/ai/workspace') ? 'text-blue-600 bg-blue-50' : 'hover:bg-slate-50'} p-4 rounded-xl transition-all`}>AI 사업계획서 작성</Link>}
             {role === 'mentor' && (
               <>
