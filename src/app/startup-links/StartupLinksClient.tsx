@@ -177,17 +177,16 @@ export default function StartupLinksClient() {
                 <div><p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-blue-600">CURATED LINKS</p><h2 id={`category-${categories.indexOf(item)}`} className="text-2xl font-black tracking-tight sm:text-3xl">{item}</h2></div>
                 <span className="shrink-0 text-sm font-bold text-slate-400">{links.length}개 링크</span>
               </div>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-3">
                 {links.map(link => {
                   const host = new URL(link.url).hostname.replace(/^www\./, '');
-                  return <article key={link.id} className="group flex min-h-48 flex-col rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-900/5">
-                    <div className="mb-5 flex items-start justify-between gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><Link2 size={20} /></div>
-                      {canManage && <div className="flex gap-1"><button type="button" onClick={() => openForm(link)} aria-label={`${link.title} 수정`} className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600"><Pencil size={16} /></button><button type="button" onClick={() => void removeLink(link)} aria-label={`${link.title} 삭제`} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={16} /></button></div>}
-                    </div>
-                    <h3 className="text-lg font-black leading-snug text-slate-900">{link.title}</h3>
-                    {link.description && <p className="mt-2 flex-1 text-sm leading-6 text-slate-500">{link.description}</p>}
-                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm font-bold text-blue-600 hover:text-blue-800" aria-label={`${link.title} 새 창에서 열기`}><span className="truncate">{host}</span><ArrowRight size={18} className="shrink-0 transition group-hover:translate-x-1" /></a>
+                  return <article key={link.id} className="group flex items-center rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-blue-300 hover:shadow-md">
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" className="flex min-w-0 flex-1 items-center gap-3 px-4 py-4 sm:gap-5 sm:px-5" aria-label={`${link.title} 새 창에서 열기`}>
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><Link2 size={19} /></span>
+                      <span className="min-w-0 flex-1"><span className="block font-black leading-snug text-slate-900">{link.title}</span>{link.description && <span className="mt-1 block text-sm leading-5 text-slate-500">{link.description}</span>}</span>
+                      <span className="hidden max-w-48 truncate text-sm font-bold text-blue-600 sm:block">{host}</span><ArrowRight size={18} className="shrink-0 text-blue-600 transition group-hover:translate-x-1" />
+                    </a>
+                    {canManage && <div className="flex shrink-0 gap-1 pr-3"><button type="button" onClick={() => openForm(link)} aria-label={`${link.title} 수정`} className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600"><Pencil size={16} /></button><button type="button" onClick={() => void removeLink(link)} aria-label={`${link.title} 삭제`} className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={16} /></button></div>}
                   </article>;
                 })}
               </div>
