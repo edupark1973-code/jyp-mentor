@@ -130,6 +130,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isMentor();
     }
+    match /public_profiles/{id} {
+      allow read: if true;
+      allow write: if isMentor();
+    }
     match /materials/{id} { allow read, write: if true; }
     match /questions/{id} { allow read, write: if true; }
   }
