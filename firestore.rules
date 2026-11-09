@@ -137,6 +137,15 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isMentor();
     }
+    match /directory_entries/{id} {
+      allow read, write: if isMentor();
+    }
+    match /directory_shares/{id} {
+      allow get: if resource.data.active == true &&
+        (!('expiresAt' in resource.data) || resource.data.expiresAt == null || request.time < resource.data.expiresAt);
+      allow list: if isMentor();
+      allow create, update, delete: if isMentor();
+    }
     match /materials/{id} { allow read, write: if true; }
     match /questions/{id} { allow read, write: if true; }
   }

@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
     "firebase": "^12.19.0",
     "firebase-admin": "^13.10.0",
     "googleapis": "^171.4.0",
