@@ -21,7 +21,7 @@ function personValue(entry: Entry, column: typeof personColumns[number]) {
     직위: /^(직위|직책|직급)$/,
     연락처: /^(연락처|휴대전화|휴대폰|전화번호)$/,
     이메일: /^(이메일|이메일주소|email|e-mail)$/i,
-    주요이력: /^(이력 ?및 ?경력|경력|주요이력|주요 ?경력|특이사항)$/,
+    주요이력: /^(이력 ?및 ?경력(?:\(특이사항\))?|경력|주요이력|주요 ?경력|특이사항)$/,
   };
   return entry.fields.filter((field) => patterns[column].test(field.label.replace(/\s/g, ''))).map((field) => field.value).join('\n') || '—';
 }
@@ -44,7 +44,7 @@ function structuredFields(kind: Kind, fields: ImportedRow['fields'], sheet: stri
   const reference: string[] = [];
   const patterns: Record<string, RegExp> = kind === 'person' ? {
     성명: /^(성명|이름|멘토명|강사명)$/, 소속: /^(주 ?소속|소속|기관명|회사명)$/, 직위: /^(직위|직책|직급)$/,
-    연락처: /^(연락처|휴대전화|휴대폰|전화번호)$/, 이메일: /^(이메일|이메일주소|email|e-mail)$/i, 주요이력: /^(이력 ?및 ?경력|경력|주요이력|주요 ?경력|특이사항)$/,
+    연락처: /^(연락처|휴대전화|휴대폰|전화번호)$/, 이메일: /^(이메일|이메일주소|email|e-mail)$/i, 주요이력: /^(이력 ?및 ?경력(?:\(특이사항\))?|경력|주요이력|주요 ?경력|특이사항)$/,
   } : {
     대분류: /^(대분류|대 ?분류)$/, 소분류: /^(소분류|소 ?분류)$/, 업체명: /^(업체명|회사명|기업명)$/, 지역: /^(지역|주소|소재지)$/, 연락처: /^(연락처|연락방법|전화번호|휴대전화|휴대폰|카톡|카카오톡)$/,
   };
