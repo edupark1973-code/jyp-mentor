@@ -3,6 +3,7 @@ export type CompanyRecord = { sheet: string; fields: CompanyField[] };
 
 const keys = ['기업(회사)명', '대표명', '아이템명(주요사업내용)', '연락처(핸드폰)', '이메일주소', '참고'] as const;
 export const companyColumns = keys;
+export const companyVisibleColumns = keys.slice(0, 5);
 
 function fieldKind(label: string): typeof keys[number] | null {
   const key = label.replace(/\s+/g, '').toLowerCase();
