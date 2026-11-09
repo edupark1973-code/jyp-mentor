@@ -120,7 +120,13 @@ export default function DirectoryPage() {
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
     const result = entries.filter((entry) => entry.kind === kind && Boolean(entry.archived) === showArchived && (!duplicatesOnly || duplicateNames.has(title(entry).trim().replace(/\s+/g, '').toLowerCase())) && (kind !== 'person' || !personCategoryFilters.length || personCategoryFilters.includes(personValue(entry, '분류'))) && (kind !== 'vendor' || (!vendorMajorFilters.length && !vendorMinorFilters.length) || (vendorMajorFilters.length > 0 && (!vendorMinorFilters.length || vendorMinorFilters.includes(vendorValue(entry, '소분류'))) && vendorMajorFilters.includes(vendorValue(entry, '대분류')))) && (!q || [entry.source, entry.sheet, ...entry.fields.flatMap((field) => [field.label, field.value])].join(' ').toLowerCase().includes(q)));
-    return [...result].sort((left, right) => kind === 'person' ? `${personValue(left, '분류')}\u0000${personValue(left, '성명')}`.localeCompare(`${personValue(right, '분류')}\u0000${personValue(right, '성명')}`, 'ko') : kind !== 'vendor' ? 0 : `${vendorValue(left, '대분류')}\u0000${vendorValue(left, '소분류')}\u0000${vendorValue(left, '업체명')}`.localeCompare(`${vendorValue(right, '대분류')}\u0000${vendorValue(right, '소분류')}\u0000${vendorValue(right, '업체명')}`, 'ko'));
+    return [...result].sort((left, right) => {
+      if (duplicatesOnly) {
+        const nameOrder = title(left).trim().replace(/\s+/g, '').toLowerCase().localeCompare(title(right).trim().replace(/\s+/g, '').toLowerCase(), 'ko');
+        if (nameOrder) return nameOrder;
+      }
+      return kind === 'person' ? `${personValue(left, '분류')}\u0000${personValue(left, '성명')}`.localeCompare(`${personValue(right, '분류')}\u0000${personValue(right, '성명')}`, 'ko') : kind !== 'vendor' ? 0 : `${vendorValue(left, '대분류')}\u0000${vendorValue(left, '소분류')}\u0000${vendorValue(left, '업체명')}`.localeCompare(`${vendorValue(right, '대분류')}\u0000${vendorValue(right, '소분류')}\u0000${vendorValue(right, '업체명')}`, 'ko');
+    });
   }, [entries, kind, keyword, showArchived, duplicatesOnly, duplicateNames, vendorMajorFilters, vendorMinorFilters, personCategoryFilters]);
   const chosen = filtered.filter((entry) => selected.includes(entry.id));
   const availableShareFields = [...new Set(chosen.flatMap((entry) => entry.fields.map((field) => canonicalLabel(field.label))))].sort();
