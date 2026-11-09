@@ -15,7 +15,7 @@ const initialProfile: Profile = {
   links: [
     { title: '박정용 멘토 소개', description: '네이버 인물검색', url: 'https://search.naver.com/search.naver?where=nexearch&sm=tab_etc&mra=bjky&pkid=1&os=483549&qvt=0&query=%EB%B0%95%EC%A0%95%EC%9A%A9' },
     { title: '창업멘토링 카카오톡 채널', description: '멘토링 일정과 창업정보 구독', url: 'http://pf.kakao.com/_zHzgn' },
-    { title: '멘토링 장소 안내', description: '한남대학교 문과대학 약도', url: 'https://sites.google.com/view/huss-meet' },
+    { title: '멘토링 장소 안내', description: '한남대학교 문과대학 약도', url: '/mentoring-place' },
     { title: '창업가를 위한 추천 링크 모음', description: '지역별 창업가 단톡과 창업교육·정보', url: '/startup-links' },
   ],
 };
@@ -34,7 +34,7 @@ export default function ProfileClient() {
   useEffect(() => onSnapshot(doc(db, 'public_profiles', 'mentor'), snap => {
     if (snap.exists()) {
       const data = snap.data();
-      setProfile({ ...initialProfile, ...data, links: Array.isArray(data.links) ? data.links : initialProfile.links });
+      setProfile({ ...initialProfile, ...data, links: Array.isArray(data.links) ? data.links.map((link: ProfileLink) => ({ ...link, url: link.url?.replace(/^https?:\/\/sites\.google\.com\/view\/huss-meet\/?(?:[?#].*)?$/, '/mentoring-place') })) : initialProfile.links });
     } else setProfile(initialProfile);
     setError('');
   }, () => setError('저장된 프로필을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.')), []);
