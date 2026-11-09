@@ -67,6 +67,30 @@ function mergedFields(primary, duplicate) {
 async function main() {
   const token = await authToken();
   const documents = (await listAll(token)).filter((document) => value(document, 'kind') === 'company' && value(document, 'archived') !== 'true');
+  if (process.argv.includes('--dedupe-fields')) {
+    const writes = [];
+    for (const document of documents) {
+      const fields = readFields(document);
+      let changed = false;
+      const next = fields.map((field) => {
+        if (!/^(연락처|연락처\(핸드폰\)|휴대전화|휴대폰|전화번호)$/.test(field.label.replace(/\s+/g, ''))) return field;
+        const seen = new Set();
+        const unique = field.value.split(/[\n,;/|]+/).map((item) => item.trim()).filter(Boolean).filter((item) => {
+          const key = item.replace(/\D/g, '') || item.replace(/\s+/g, '').toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        const value = unique.join('\n');
+        if (value !== field.value) changed = true;
+        return { ...field, value };
+      });
+      if (changed) writes.push({ update: { name: document.name, fields: { fields: array(next) } }, updateMask: { fieldPaths: ['fields'] } });
+    }
+    console.log(JSON.stringify({ mode: commit ? 'dedupe-fields-commit' : 'dedupe-fields', companyRecords: documents.length, changedRecords: writes.length }));
+    if (commit) for (let offset = 0; offset < writes.length; offset += 300) await request(token, `${base.replace('/directory_entries', '')}:commit`, { method: 'POST', body: JSON.stringify({ writes: writes.slice(offset, offset + 300) }) });
+    return;
+  }
   if (process.argv.includes('--restore')) {
     const archived = (await listAll(token)).filter((document) => value(document, 'kind') === 'company' && value(document, 'mergedInto'));
     const writes = archived.map((document) => ({ update: { name: document.name, fields: { archived: { booleanValue: false }, mergedInto: { nullValue: 'NULL_VALUE' } } }, updateMask: { fieldPaths: ['archived', 'mergedInto'] } }));

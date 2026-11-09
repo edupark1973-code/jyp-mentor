@@ -11,11 +11,12 @@ import { companyColumns, companyVisibleColumns, isCompanyCandidate, projectCompa
 type Kind = 'company' | 'person' | 'vendor';
 type Entry = ImportedRow & { id: string; kind: Kind; source: string; archived?: boolean };
 const labels: Record<Kind, string> = { company: '기업 DB', person: '강사·멘토 인력풀', vendor: '외주업체 DB' };
-const personColumns = ['성명', '소속', '직위', '연락처', '이메일', '주요이력'] as const;
+const personColumns = ['분류', '성명', '소속', '직위', '연락처', '이메일', '주요이력'] as const;
 const vendorColumns = ['대분류', '소분류', '업체명', '지역', '연락처'] as const;
 
 function personValue(entry: Entry, column: typeof personColumns[number]) {
   const patterns: Record<typeof personColumns[number], RegExp> = {
+    분류: /^분류$/,
     성명: /^(성명|이름|멘토명|강사명)$/,
     소속: /^(주 ?소속|소속|기관명|회사명)$/,
     직위: /^(직위|직책|직급)$/,
@@ -43,6 +44,7 @@ function structuredFields(kind: Kind, fields: ImportedRow['fields'], sheet: stri
   const values: { label: string; value: string }[] = columns.map((column) => ({ label: column, value: '' }));
   const reference: string[] = [];
   const patterns: Record<string, RegExp> = kind === 'person' ? {
+    분류: /^(분류|구분|탭)$/,
     성명: /^(성명|이름|멘토명|강사명)$/, 소속: /^(주 ?소속|소속|기관명|회사명)$/, 직위: /^(직위|직책|직급)$/,
     연락처: /^(연락처|휴대전화|휴대폰|전화번호)$/, 이메일: /^(이메일|이메일주소|email|e-mail)$/i, 주요이력: /^(이력 ?및 ?경력(?:\(특이사항\))?|경력|주요이력|주요 ?경력|특이사항)$/,
   } : {
@@ -54,6 +56,7 @@ function structuredFields(kind: Kind, fields: ImportedRow['fields'], sheet: stri
     if (index >= 0) { if (field.value && !values[index].value.split('\n').includes(field.value)) values[index].value = values[index].value ? `${values[index].value}\n${field.value}` : field.value; }
     else if (field.value && field.label !== '참고') reference.push(`${field.label}: ${field.value}`);
   }
+  if (kind === 'person' && !values[0].value) values[0].value = sheet;
   values.push({ label: '참고', value: reference.join('\n') });
   return values;
 }
@@ -90,6 +93,8 @@ export default function DirectoryPage() {
   const [page, setPage] = useState(0);
   const [duplicatesOnly, setDuplicatesOnly] = useState(false);
   const [shares, setShares] = useState<{ id: string; active: boolean }[]>([]);
+  const [vendorMajorFilters, setVendorMajorFilters] = useState<string[]>([]);
+  const [vendorMinorFilters, setVendorMinorFilters] = useState<string[]>([]);
 
   async function reload() {
     const snapshot = await getDocs(collection(db, 'directory_entries'));
@@ -108,10 +113,13 @@ export default function DirectoryPage() {
     }
     return new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
   }, [entries, kind]);
+  const vendorMajors = useMemo(() => [...new Set(entries.filter((entry) => entry.kind === 'vendor' && !entry.archived).map((entry) => vendorValue(entry, '대분류')).filter(Boolean))].sort(), [entries]);
+  const vendorMinors = useMemo(() => [...new Set(entries.filter((entry) => entry.kind === 'vendor' && !entry.archived).map((entry) => vendorValue(entry, '소분류')).filter(Boolean))].sort(), [entries]);
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    return entries.filter((entry) => entry.kind === kind && Boolean(entry.archived) === showArchived && (!duplicatesOnly || duplicateNames.has(title(entry).trim().replace(/\s+/g, '').toLowerCase())) && (!q || [entry.source, entry.sheet, ...entry.fields.flatMap((field) => [field.label, field.value])].join(' ').toLowerCase().includes(q)));
-  }, [entries, kind, keyword, showArchived, duplicatesOnly, duplicateNames]);
+    const result = entries.filter((entry) => entry.kind === kind && Boolean(entry.archived) === showArchived && (!duplicatesOnly || duplicateNames.has(title(entry).trim().replace(/\s+/g, '').toLowerCase())) && (kind !== 'vendor' || (!vendorMajorFilters.length || vendorMajorFilters.includes(vendorValue(entry, '대분류'))) && (!vendorMinorFilters.length || vendorMinorFilters.includes(vendorValue(entry, '소분류')))) && (!q || [entry.source, entry.sheet, ...entry.fields.flatMap((field) => [field.label, field.value])].join(' ').toLowerCase().includes(q)));
+    return [...result].sort((left, right) => kind !== 'vendor' ? 0 : `${vendorValue(left, '대분류')}\u0000${vendorValue(left, '소분류')}\u0000${vendorValue(left, '업체명')}`.localeCompare(`${vendorValue(right, '대분류')}\u0000${vendorValue(right, '소분류')}\u0000${vendorValue(right, '업체명')}`, 'ko'));
+  }, [entries, kind, keyword, showArchived, duplicatesOnly, duplicateNames, vendorMajorFilters, vendorMinorFilters]);
   const chosen = filtered.filter((entry) => selected.includes(entry.id));
   const availableShareFields = [...new Set(chosen.flatMap((entry) => entry.fields.map((field) => canonicalLabel(field.label))))].sort();
   const preview = useMemo(() => {
@@ -215,6 +223,7 @@ export default function DirectoryPage() {
       {workbook && <div className="mt-4 space-y-3"><div className="flex flex-wrap items-center gap-3"><select value={sheetName} onChange={(event) => { const name = event.target.value; const suggested = sourceHeaderRow(name); setSheetName(name); setHeader(suggested); setStart(suggested + 1); }} className="rounded border p-2">{workbook.worksheets.filter((s) => s.name !== '멘토자격' && s.name !== 'App Metadata').map((sheet) => <option key={sheet.name}>{sheet.name}</option>)}</select><label>제목 행 <input type="number" min="0" value={header} onChange={(event) => setHeader(Number(event.target.value))} className="w-20 rounded border p-2" /></label><label>데이터 시작 행 <input type="number" min="1" value={start} onChange={(event) => setStart(Number(event.target.value))} className="w-20 rounded border p-2" /></label><button disabled={busy || !preview.length || sheetName === '멘토자격' || sheetName === 'App Metadata'} onClick={() => void importRows()} className="rounded bg-blue-700 px-4 py-2 font-bold text-white disabled:opacity-50">{preview.length}행 가져오기</button></div><p className="text-xs text-slate-500">제목 행이 없으면 0을 입력합니다. 미리보기: {preview.slice(0, 2).map((row) => row.fields.map((field) => `${field.label}: ${field.value}`).join(' | ')).join(' / ')}</p></div>}
     </section>
     <section className="rounded-2xl bg-white p-5 shadow-sm"><div className="flex flex-wrap gap-3"><input value={keyword} onChange={(event) => { setKeyword(event.target.value); setPage(0); }} placeholder="이름, 지역, 분야, 출처 검색" className="min-w-56 flex-1 rounded-xl border p-3" /><button onClick={() => void exportRows()} className="rounded-xl border px-4 font-bold">검색 결과 엑셀 다운로드</button><button onClick={() => setEditing({ id: crypto.randomUUID(), kind, source: '직접 등록', sheet: '직접 등록', row: 0, fields: (kind === 'company' ? [...companyColumns] : kind === 'person' ? [...personColumns, '참고'] : [...vendorColumns, '참고']).map((label) => ({ label, value: '' })) })} className="rounded-xl bg-blue-700 px-4 py-2 font-bold text-white">직접 등록</button><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); setPage(0); }} />보관함</label><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={duplicatesOnly} onChange={(event) => { setDuplicatesOnly(event.target.checked); setPage(0); }} />이름 중복 후보</label><button disabled={chosen.length !== 2 || showArchived} onClick={() => void mergeSelected().catch(() => setMessage('병합하지 못했습니다.'))} className="rounded-xl border px-4 py-2 text-sm font-bold disabled:opacity-40">선택 2건 병합</button></div><p className="my-3 text-sm text-slate-500">검색 결과 {filtered.length}건 · 선택 {chosen.length}건. 이름이 같더라도 다른 대상일 수 있으므로 확인 후 관리하세요.</p>
+      {kind === 'vendor' && <div className="mb-4 space-y-3 rounded-xl bg-slate-50 p-3"><p className="text-sm font-bold">대분류·소분류 필터 (선택한 항목만 표시)</p><div className="flex flex-wrap gap-3">{vendorMajors.map((value) => <label key={`major-${value}`} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={vendorMajorFilters.includes(value)} onChange={(event) => setVendorMajorFilters((current) => event.target.checked ? [...current, value] : current.filter((item) => item !== value))} />{value}</label>)}</div><div className="flex flex-wrap gap-3 border-t pt-2">{vendorMinors.map((value) => <label key={`minor-${value}`} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={vendorMinorFilters.includes(value)} onChange={(event) => setVendorMinorFilters((current) => event.target.checked ? [...current, value] : current.filter((item) => item !== value))} />{value}</label>)}</div><button className="text-xs text-blue-700" onClick={() => { setVendorMajorFilters([]); setVendorMinorFilters([]); }}>필터 초기화</button></div>}
       <div className="max-h-[600px] overflow-auto"><table className="w-full text-left text-sm"><thead><tr><th className="p-2">선택</th>{kind === 'company' ? companyVisibleColumns.map((column) => <th key={column} className="min-w-40 p-2">{column}</th>) : kind === 'person' ? personColumns.map((column) => <th key={column} className="min-w-32 p-2">{column}</th>) : kind === 'vendor' ? vendorColumns.map((column) => <th key={column} className="min-w-32 p-2">{column}</th>) : <th>이름 / 내용</th>}<th>관리</th></tr></thead><tbody>{filtered.slice(page * 100, page * 100 + 100).map((entry) => <tr key={entry.id} className="border-t"><td className="p-2"><input type="checkbox" checked={selected.includes(entry.id)} onChange={(event) => { setSelected(event.target.checked ? [...selected, entry.id] : selected.filter((id) => id !== entry.id)); setShareFields(''); }} /></td>{kind === 'company' ? companyVisibleColumns.map((column) => <td key={column} className="min-w-40 whitespace-pre-wrap break-words p-2 align-top">{entry.fields.find((field) => field.label === column)?.value || '—'}</td>) : kind === 'person' ? personColumns.map((column) => <td key={column} className="min-w-32 whitespace-pre-wrap break-words p-2 align-top">{personValue(entry, column)}</td>) : kind === 'vendor' ? vendorColumns.map((column) => <td key={column} className="min-w-32 whitespace-pre-wrap break-words p-2 align-top">{vendorValue(entry, column)}</td>) : <td className="p-2">{title(entry)}</td>}<td><button onClick={() => setEditing(entry)} className="text-blue-700">상세·수정</button></td></tr>)}</tbody></table></div><div className="mt-3 flex items-center gap-4 text-sm"><button disabled={page === 0} onClick={() => setPage(page - 1)} className="rounded border px-3 py-1 disabled:opacity-40">이전</button><span>{page + 1} / {Math.max(1, Math.ceil(filtered.length / 100))}</span><button disabled={(page + 1) * 100 >= filtered.length} onClick={() => setPage(page + 1)} className="rounded border px-3 py-1 disabled:opacity-40">다음</button></div>
     </section>
     <section className="rounded-2xl bg-white p-5 shadow-sm"><h2 className="font-bold">선택 항목 읽기 전용 공유</h2><p className="my-2 text-sm text-slate-500">표시할 항목을 직접 선택하세요. 선택하지 않은 연락처와 메모는 공유되지 않습니다.</p><div className="my-3 flex flex-wrap gap-3">{availableShareFields.map((field) => { const checked = shareFields.split(',').includes(field); return <label key={field} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={checked} onChange={(event) => { const current = shareFields.split(',').filter(Boolean); setShareFields((event.target.checked ? [...current, field] : current.filter((value) => value !== field)).join(',')); }} />{field}</label>; })}</div><label className="mr-3 text-sm">만료 <select value={shareDays} onChange={(event) => setShareDays(Number(event.target.value))} className="rounded border p-2"><option value={0}>직접 중지할 때까지</option><option value={7}>7일</option><option value={30}>30일</option><option value={90}>90일</option></select></label><button onClick={() => void makeShare().catch(() => setMessage('공유 링크를 만들지 못했습니다.'))} className="rounded bg-slate-900 px-4 py-2 text-white">링크 만들기</button>{shareUrl && <p className="mt-3 break-all text-sm">{shareUrl}</p>}<div className="mt-4 space-y-2">{shares.filter((share) => share.active).map((share) => <div key={share.id} className="flex items-center justify-between gap-2 text-xs"><a className="truncate text-blue-700" href={`/shared-directory/?id=${share.id}`} target="_blank" rel="noreferrer">공유 링크 열기</a><button className="text-red-700" onClick={() => void deleteDoc(doc(db, 'directory_shares', share.id)).then(() => setShares((current) => current.filter((item) => item.id !== share.id)))}>공유 중지</button></div>)}</div></section>

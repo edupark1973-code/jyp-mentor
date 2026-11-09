@@ -28,6 +28,16 @@ export function projectCompany(record: CompanyRecord): CompanyField[] {
     if (!items.includes(value)) items.push(value);
     values.set(key, items);
   }
+  const contactKey = keys[3];
+  const contactValues = values.get(contactKey) ?? [];
+  const seenContacts = new Set<string>();
+  const uniqueContacts = contactValues.flatMap((value) => value.split(/[\n,;/]+/).map((item) => item.trim()).filter(Boolean)).filter((value) => {
+    const normalized = value.replace(/[^0-9]/g, '') || value.replace(/\s+/g, '').toLowerCase();
+    if (seenContacts.has(normalized)) return false;
+    seenContacts.add(normalized);
+    return true;
+  });
+  values.set(contactKey, uniqueContacts);
   const reference = values.get(keys[5]) ?? [];
   if (record.sheet && record.sheet !== '직접 등록' && !reference.some((text) => text.includes('출처 탭:'))) reference.unshift(`출처 탭: ${record.sheet}`);
   if (extra.length) reference.push(...extra);
