@@ -106,23 +106,36 @@ export default function DirectoryPage() {
   useEffect(() => { if (role === 'mentor') void reload().catch(() => setMessage('자료를 불러오지 못했습니다. 권한과 연결을 확인해 주세요.')); }, [role]);
 
   const duplicateNames = useMemo(() => {
+    if (kind === 'company') {
+      const counts = new Map<string, number>();
+      for (const entry of entries) {
+        if (entry.kind !== 'company' || entry.archived) continue;
+        const company = entry.fields.find((item) => item.label === '기업(회사)명')?.value || '';
+        const name = company.trim().replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+        if (name) counts.set(name, (counts.get(name) || 0) + 1);
+      }
+      const duplicates = new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
+      return new Set(entries.filter((entry) => entry.kind === 'company' && !entry.archived && duplicates.has((entry.fields.find((item) => item.label === '기업(회사)명')?.value || '').trim().replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase())).map((entry) => entry.id));
+    }
     const counts = new Map<string, number>();
     for (const entry of entries) {
       if (entry.kind !== kind || entry.archived) continue;
       const name = title(entry).trim().replace(/\s+/g, '').toLowerCase();
       if (name && name !== '(이름없음)' && name !== '(기업명미기재)') counts.set(name, (counts.get(name) || 0) + 1);
     }
-    return new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
+    const duplicateNames = new Set([...counts].filter(([, count]) => count > 1).map(([name]) => name));
+    return new Set(entries.filter((entry) => entry.kind === kind && duplicateNames.has(title(entry).trim().replace(/\s+/g, '').toLowerCase())).map((entry) => entry.id));
   }, [entries, kind]);
   const vendorMajors = useMemo(() => [...new Set(entries.filter((entry) => entry.kind === 'vendor' && !entry.archived).map((entry) => vendorValue(entry, '대분류')).filter(Boolean))].sort(), [entries]);
   const vendorMinors = useMemo(() => [...new Set(entries.filter((entry) => entry.kind === 'vendor' && !entry.archived && (!vendorMajorFilters.length || vendorMajorFilters.includes(vendorValue(entry, '대분류')))).map((entry) => vendorValue(entry, '소분류')).filter(Boolean))].sort(), [entries, vendorMajorFilters]);
   const personCategories = useMemo(() => [...new Set(entries.filter((entry) => entry.kind === 'person' && !entry.archived).map((entry) => personValue(entry, '분류')).filter(Boolean))].sort(), [entries]);
   const filtered = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    const result = entries.filter((entry) => entry.kind === kind && Boolean(entry.archived) === showArchived && (!duplicatesOnly || duplicateNames.has(title(entry).trim().replace(/\s+/g, '').toLowerCase())) && (kind !== 'person' || !personCategoryFilters.length || personCategoryFilters.includes(personValue(entry, '분류'))) && (kind !== 'vendor' || (!vendorMajorFilters.length && !vendorMinorFilters.length) || (vendorMajorFilters.length > 0 && (!vendorMinorFilters.length || vendorMinorFilters.includes(vendorValue(entry, '소분류'))) && vendorMajorFilters.includes(vendorValue(entry, '대분류')))) && (!q || [entry.source, entry.sheet, ...entry.fields.flatMap((field) => [field.label, field.value])].join(' ').toLowerCase().includes(q)));
+    const result = entries.filter((entry) => entry.kind === kind && Boolean(entry.archived) === showArchived && (!duplicatesOnly || duplicateNames.has(entry.id)) && (kind !== 'person' || !personCategoryFilters.length || personCategoryFilters.includes(personValue(entry, '분류'))) && (kind !== 'vendor' || (!vendorMajorFilters.length && !vendorMinorFilters.length) || (vendorMajorFilters.length > 0 && (!vendorMinorFilters.length || vendorMinorFilters.includes(vendorValue(entry, '소분류'))) && vendorMajorFilters.includes(vendorValue(entry, '대분류')))) && (!q || [entry.source, entry.sheet, ...entry.fields.flatMap((field) => [field.label, field.value])].join(' ').toLowerCase().includes(q)));
     return [...result].sort((left, right) => {
       if (duplicatesOnly) {
-        const nameOrder = title(left).trim().replace(/\s+/g, '').toLowerCase().localeCompare(title(right).trim().replace(/\s+/g, '').toLowerCase(), 'ko');
+        const identity = (entry: Entry) => (entry.fields.find((field) => field.label === '기업(회사)명')?.value || title(entry)).trim().replace(/[\s\p{P}\p{S}]/gu, '').toLowerCase();
+        const nameOrder = identity(left).localeCompare(identity(right), 'ko');
         if (nameOrder) return nameOrder;
       }
       return kind === 'person' ? `${personValue(left, '분류')}\u0000${personValue(left, '성명')}`.localeCompare(`${personValue(right, '분류')}\u0000${personValue(right, '성명')}`, 'ko') : kind !== 'vendor' ? 0 : `${vendorValue(left, '대분류')}\u0000${vendorValue(left, '소분류')}\u0000${vendorValue(left, '업체명')}`.localeCompare(`${vendorValue(right, '대분류')}\u0000${vendorValue(right, '소분류')}\u0000${vendorValue(right, '업체명')}`, 'ko');
