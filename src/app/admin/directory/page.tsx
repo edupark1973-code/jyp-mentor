@@ -197,6 +197,24 @@ export default function DirectoryPage() {
     setEntries((current) => current.some((entry) => entry.id === id) ? current.map((entry) => entry.id === id ? editing : entry) : [editing, ...current]);
     setEditing(null);
   }
+  async function removeEntry(entry: Entry) {
+    if (!window.confirm('이 자료를 Firebase에서 완전히 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.')) return;
+    await deleteDoc(doc(db, 'directory_entries', entry.id));
+    setEntries((current) => current.filter((item) => item.id !== entry.id));
+    setSelected((current) => current.filter((id) => id !== entry.id));
+    if (editing?.id === entry.id) setEditing(null);
+    setMessage('자료를 삭제했습니다.');
+  }
+  async function removeSelected() {
+    const targets = entries.filter((entry) => selected.includes(entry.id));
+    if (!targets.length || !window.confirm(`선택한 ${targets.length}건을 Firebase에서 완전히 삭제하시겠습니까?`)) return;
+    const batch = writeBatch(db);
+    targets.forEach((entry) => batch.delete(doc(db, 'directory_entries', entry.id)));
+    await batch.commit();
+    setEntries((current) => current.filter((entry) => !selected.includes(entry.id)));
+    setSelected([]);
+    setMessage(`${targets.length}건을 삭제했습니다.`);
+  }
   async function mergeSelected() {
     if (chosen.length !== 2) { setMessage('병합할 두 항목을 선택해 주세요.'); return; }
     if (!window.confirm('선택한 두 항목의 내용을 첫 번째 항목에 합치고 두 번째 항목을 보관합니다. 같은 대상인지 확인하셨습니까?')) return;
@@ -237,5 +255,6 @@ export default function DirectoryPage() {
     </section>
     <section className="rounded-2xl bg-white p-5 shadow-sm"><h2 className="font-bold">선택 항목 읽기 전용 공유</h2><p className="my-2 text-sm text-slate-500">표시할 항목을 직접 선택하세요. 선택하지 않은 연락처와 메모는 공유되지 않습니다.</p><div className="my-3 flex flex-wrap gap-3">{availableShareFields.map((field) => { const checked = shareFields.split(',').includes(field); return <label key={field} className="flex items-center gap-1 text-sm"><input type="checkbox" checked={checked} onChange={(event) => { const current = shareFields.split(',').filter(Boolean); setShareFields((event.target.checked ? [...current, field] : current.filter((value) => value !== field)).join(',')); }} />{field}</label>; })}</div><label className="mr-3 text-sm">만료 <select value={shareDays} onChange={(event) => setShareDays(Number(event.target.value))} className="rounded border p-2"><option value={0}>직접 중지할 때까지</option><option value={7}>7일</option><option value={30}>30일</option><option value={90}>90일</option></select></label><button onClick={() => void makeShare().catch(() => setMessage('공유 링크를 만들지 못했습니다.'))} className="rounded bg-slate-900 px-4 py-2 text-white">링크 만들기</button>{shareUrl && <p className="mt-3 break-all text-sm">{shareUrl}</p>}<div className="mt-4 space-y-2">{shares.filter((share) => share.active).map((share) => <div key={share.id} className="flex items-center justify-between gap-2 text-xs"><a className="truncate text-blue-700" href={`/shared-directory/?id=${share.id}`} target="_blank" rel="noreferrer">공유 링크 열기</a><button className="text-red-700" onClick={() => void deleteDoc(doc(db, 'directory_shares', share.id)).then(() => setShares((current) => current.filter((item) => item.id !== share.id)))}>공유 중지</button></div>)}</div></section>
     {editing && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><div className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-2xl bg-white p-6"><h2 className="text-xl font-bold">상세 정보</h2><p className="mb-4 text-sm text-slate-500">{editing.source} / {editing.sheet} / {editing.row}행</p>{editing.fields.map((field, index) => <label key={index} className="mb-3 block text-sm font-bold">{field.label}<textarea value={field.value} onChange={(event) => setEditing({ ...editing, fields: editing.fields.map((value, i) => i === index ? { ...value, value: event.target.value } : value) })} className="mt-1 block w-full rounded border p-2 font-normal" /></label>)}<div className="flex gap-2"><button onClick={() => void saveEdit().catch(() => setMessage('저장하지 못했습니다.'))} className="rounded bg-blue-700 px-4 py-2 text-white">저장</button><button onClick={() => { setEditing(null); }} className="rounded border px-4 py-2">닫기</button>{entries.some((entry) => entry.id === editing.id) && <button onClick={() => void setDoc(doc(db, 'directory_entries', editing.id), { archived: !editing.archived }, { merge: true }).then(() => { setEntries((current) => current.map((entry) => entry.id === editing.id ? { ...entry, archived: !editing.archived } : entry)); setEditing(null); }).catch(() => setMessage('상태를 변경하지 못했습니다.'))} className="ml-auto text-red-700">{editing.archived ? '복구' : '보관'}</button>}</div></div></div>}
+    <button disabled={!chosen.length || showArchived} onClick={() => void removeSelected().catch(() => setMessage('자료를 삭제하지 못했습니다.'))} className="rounded-xl border border-red-300 px-4 py-2 text-sm font-bold text-red-700 disabled:opacity-40">선택 삭제</button>
   </div>;
 }
