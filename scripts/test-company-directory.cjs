@@ -12,17 +12,19 @@ test('maps actual startup sheet headers and discards unrelated fields', () => {
     { label: '사업아이템', value: '제품' }, { label: '대표전화번호', value: '010-1234-5678' },
     { label: '대표이메일', value: 'a@example.com' }, { label: '멘토명', value: '다른 정보' },
   ];
-  assert.deepEqual(projectCompany({ sheet: 'kict', fields }).map((field) => field.value), ['회사', '대표', '제품', '010-1234-5678', 'a@example.com']);
+  assert.deepEqual(projectCompany({ sheet: 'kict', fields }).map((field) => field.value), ['회사', '대표', '제품', '010-1234-5678', 'a@example.com', '출처 탭: kict\n멘토명: 다른 정보']);
 });
 
 test('retains an idea without inventing a company name', () => {
   const entry = { sheet: '모두의창업', fields: [{ label: '한줄 아이디어', value: '아이디어' }, { label: '이름', value: '대표' }] };
-  assert.equal(isCompanyCandidate(entry), true);
-  assert.deepEqual(projectCompany(entry).map((field) => field.value), ['', '대표', '아이디어', '', '']);
+  assert.equal(isCompanyCandidate(entry), false);
+  assert.deepEqual(projectCompany(entry).map((field) => field.value), ['', '대표', '아이디어', '', '', '출처 탭: 모두의창업']);
 });
 
 test('combines different business descriptions and avoids identical duplicates', () => {
   const fields = [{ label: '주요사업', value: '제조' }, { label: '주요사업', value: '판매' }, { label: '사업내용', value: '제조' }];
   assert.equal(projectCompany({ sheet: '자료', fields })[2].value, '제조\n판매');
   assert.equal(isCompanyCandidate({ sheet: '자료', fields: [{ label: '멘토명', value: '사람' }] }), false);
+  assert.equal(isCompanyCandidate({ sheet: '자료', fields: [{ label: '아이템', value: '제품' }, { label: '이메일', value: 'a@example.com' }] }), true);
+  assert.equal(isCompanyCandidate({ sheet: '자료', fields: [{ label: '기업명', value: '회사' }, { label: '휴대전화', value: '010-1234-5678' }] }), false);
 });
